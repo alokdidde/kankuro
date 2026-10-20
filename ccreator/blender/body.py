@@ -1,0 +1,175 @@
+"""Body stage: morph the MakeHuman base mesh, fit the Mesh2Motion skeleton, convert to T-pose."""
+import os
+from functools import lru_cache
+
+import bpy
+import numpy as np
+from mathutils import kdtree
+
+from .. import morph
+from . import rig, util
+
+DATA = rig.DATA
+
+
+@lru_cache(maxsize=1)
+def base_weight_matrix():
+    """(nverts, n_deform_bones) Mesh2Motion weights for every MakeHuman base vertex."""
+    names = rig.deform_bone_names()
+    w = np.load(os.path.join(DATA, "m2m_weights.npz"))
+    nverts = len(morph.base()["coords"])
+    W = np.zeros((nverts, len(names)))
+    for j, n in enumerate(names):
+        if n + "|i" in w.files:
+            W[w[n + "|i"], j] = w[n + "|w"]
+    return W
+
+
+@lru_cache(maxsize=None)
+def group_verts(group):
+    faces, _ = morph.faces_of_group(group)
+    return np.unique(np.concatenate([np.asarray(f) for f in faces]))
+
+
+def _complete_weights(W, co):
+    """Vertices with no weight (some helper verts) copy the nearest body vertex."""
+    s = W.sum(1)
+    missing = np.nonzero(s < 0.5)[0]
+    body = group_verts("body")
+    if len(missing):
+        kd = kdtree.KDTree(len(body))
+        for i, v in enumerate(body):
+            kd.insert(co[v], i)
+        kd.balance()
+        for m in missing:
+            _, i, _ = kd.find(co[m])
+            W[m] = W[body[i]]
+    s = W.sum(1, keepdims=True)
+    s[s == 0] = 1
+    return W / s
+
+
+class BodyResult:
+    """Everything later stages need: the T-posed armature, T-posed coords of every base vertex, weights."""
+
+    def __init__(self, arm, coords, W):
+        self.arm = arm
+        self.coords = coords
+        self.W = W
+        self.bones = rig.deform_bone_names()
+
+
+def build(macros=None, modifiers=None, height_cm=None):
+    co = morph.morphed_coords(macros, modifiers)
+    body = group_verts("body")
+    co[:, 2] -= co[body, 2].min()
+    if height_cm:
+        h = co[body, 2].max()
+        co *= (float(height_cm) / 100.0) / h
+    W = _complete_weights(base_weight_matrix().copy(), co)
+
+    # A temporary mesh with every base vertex (body + helpers) rides along the T-pose conversion
+    b = morph.base()
+    sizes = b["face_sizes"]
+    starts = np.concatenate([[0], np.cumsum(sizes)[:-1]])
+    fv = b["face_verts"]
+    faces = [fv[s:s + n] for s, n in zip(starts, sizes)]
+    tmp = util.make_mesh("_full", co, faces)
+    names = rig.deform_bone_names()
+    util.set_weight_matrix(tmp, W, names, max_influences=None, threshold=1e-4)
+
+    arm = rig.create_armature(rig.fit_from_makehuman(co))
+    util.add_armature_modifier(tmp, arm)
+    rig.pose_to_tpose(arm)
+    rig.apply_pose_as_rest(arm, [tmp])
+    coords_t = util.get_coords(tmp)
+    bpy.data.objects.remove(tmp, do_unlink=True)
+    return BodyResult(arm, coords_t, W)
+
+
+def make_group_object(res, group, name, with_uv=True):
+    """Create an object from one MakeHuman face group, skinned with the base weights."""
+    faces, fuvs = morph.faces_of_group(group)
+    verts = np.unique(np.concatenate([np.asarray(f) for f in faces]))
+    remap = -np.ones(len(res.coords), dtype=np.int64)
+    remap[verts] = np.arange(len(verts))
+    lf = [remap[np.asarray(f)].tolist() for f in faces]
+    b = morph.base()
+    obj = util.make_mesh(name, res.coords[verts], lf, b["uvs"] if with_uv else None, fuvs if with_uv else None)
+    util.set_weight_matrix(obj, res.W[verts], res.bones)
+    util.add_armature_modifier(obj, res.arm)
+    obj["mh_verts"] = verts.tolist()
+    return obj
+
+
+def fit_proxy(res, mhclo_path):
+    """Place a MakeHuman proxy (.mhclo) onto the T-posed body. Returns (coords, faces, uvs, face_uvs)."""
+    refs, weights, offsets = [], [], []
+    scales = {}
+    obj_file = None
+    in_verts = False
+    with open(mhclo_path) as f:
+        for line in f:
+            p = line.split()
+            if not p or p[0].startswith("#"):
+                continue
+            if p[0] in ("x_scale", "y_scale", "z_scale"):
+                scales[p[0][0]] = (int(p[1]), int(p[2]), float(p[3]))
+            elif p[0] == "obj_file":
+                obj_file = p[1]
+            elif p[0] == "verts":
+                in_verts = True
+            elif in_verts and len(p) == 9:
+                refs.append([int(x) for x in p[:3]])
+                weights.append([float(x) for x in p[3:6]])
+                offsets.append([float(x) for x in p[6:9]])
+            elif in_verts and len(p) == 1:
+                refs.append([int(p[0])] * 3)
+                weights.append([1.0, 0, 0])
+                offsets.append([0.0, 0.0, 0.0])
+            elif in_verts:
+                in_verts = False
+    refs, weights, offsets = np.array(refs), np.array(weights), np.array(offsets)
+    # MakeHuman scale lines are measured on the MakeHuman base (decimetres, Y-up).
+    co_mh = res.coords  # metres, Z-up
+    def axis_scale(key, comp):
+        a, bb, ref = scales[key]
+        return abs(co_mh[a, comp] - co_mh[bb, comp]) / (ref * 0.1)
+    sx = axis_scale("x", 0)
+    sy = axis_scale("y", 2)   # MakeHuman Y (up) -> Blender Z
+    sz = axis_scale("z", 1)   # MakeHuman Z (forward) -> Blender -Y
+    off = np.stack([offsets[:, 0] * 0.1 * sx, -offsets[:, 2] * 0.1 * sz, offsets[:, 1] * 0.1 * sy], axis=1)
+    pts = (co_mh[refs] * weights[..., None]).sum(1) + off
+    # read proxy mesh topology
+    vts, faces, fuvs = [], [], []
+    with open(os.path.join(os.path.dirname(mhclo_path), obj_file)) as f:
+        for line in f:
+            if line.startswith("vt "):
+                vts.append([float(x) for x in line.split()[1:3]])
+            elif line.startswith("f "):
+                fv, ft = [], []
+                for tok in line.split()[1:]:
+                    q = tok.split("/")
+                    fv.append(int(q[0]) - 1)
+                    ft.append(int(q[1]) - 1)
+                faces.append(fv)
+                fuvs.append(ft)
+    return pts, faces, np.array(vts), fuvs
+
+
+def make_eyes(res):
+    pts, faces, uvs, fuvs = fit_proxy(res, os.path.join(DATA, "eyes", "high-poly.mhclo"))
+    # Drop the cornea shell (mapped to the small bluish disc in the corner of the eye texture);
+    # glTF viewers would show it as an opaque glowing layer over the iris.
+    keep = [i for i, fu in enumerate(fuvs) if not all(uvs[j][0] > 0.8 and uvs[j][1] < 0.2 for j in fu)]
+    faces = [faces[i] for i in keep]
+    fuvs = [fuvs[i] for i in keep]
+    used = sorted({v for f in faces for v in f})
+    remap = {v: i for i, v in enumerate(used)}
+    pts = pts[used]
+    faces = [[remap[v] for v in f] for f in faces]
+    obj = util.make_mesh("Eyes", pts, faces, uvs, fuvs)
+    vg = obj.vertex_groups.new(name="head")
+    vg.add(list(range(len(pts))), 1.0, "REPLACE")
+    util.add_armature_modifier(obj, res.arm)
+    return obj
