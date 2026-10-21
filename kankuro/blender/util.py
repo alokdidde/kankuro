@@ -10,11 +10,13 @@ import numpy as np
 def _cflush():
     """Flush C stdio: Blender's C code (the OBJ importer, ...) printf()s, which on a pipe is buffered
     and would otherwise come out after the descriptors are restored."""
-    try:
-        import ctypes
-        ctypes.CDLL(None).fflush(None)
-    except (OSError, AttributeError):  # no C library to call (Windows uses a different one)
-        pass
+    import ctypes
+    # Linux/macOS: the process's own C library; Windows: the universal CRT Blender links against
+    for lib in ((None,) if os.name != "nt" else ("ucrtbase", "msvcrt")):
+        try:
+            ctypes.CDLL(lib).fflush(None)
+        except (OSError, AttributeError, TypeError):
+            pass
 
 
 @contextlib.contextmanager

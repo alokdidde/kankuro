@@ -262,7 +262,7 @@ def import_file(project, src, kind):
         i += 1
     if not os.path.exists(dst):
         shutil.copyfile(src, dst)
-    return os.path.relpath(dst, project)
+    return os.path.relpath(dst, project).replace(os.sep, "/")  # portable spec: same on every OS
 
 
 def _same_content(a, b):
