@@ -1,4 +1,4 @@
-"""ccreator: a JSON-speaking character creator CLI for AI agents.
+"""kankuro: a JSON-speaking character creator CLI for AI agents.
 
 Every command prints exactly one JSON object on stdout:
   {"ok": true, "command": "...", ...}             on success (exit code 0)
@@ -15,17 +15,17 @@ import traceback
 from . import appearance, catalog, morph, spec as specmod
 from .errors import CliError
 
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 
 
 def emit(obj, code=0):
-    sys.stdout.write(json.dumps(obj, indent=None if os.environ.get("CCREATOR_COMPACT") else 2, default=str) + "\n")
+    sys.stdout.write(json.dumps(obj, indent=None if os.environ.get("KANKURO_COMPACT") else 2, default=str) + "\n")
     sys.stdout.flush()
     return code
 
 
 def _project(a):
-    return os.path.abspath(a.project or os.environ.get("CCREATOR_PROJECT") or ".")
+    return os.path.abspath(a.project or os.environ.get("KANKURO_PROJECT") or ".")
 
 
 def _log(project):
@@ -79,18 +79,18 @@ def cmd_catalog(a):
         "hair_styles": {k: v["desc"] for k, v in catalog.HAIR_STYLES.items()},
         "garments": {k: {"desc": v["desc"], "slot": v["slot"], "layer": v["layer"], "fabric": v.get("fabric")}
                      for k, v in catalog.GARMENTS.items()},
-        "fabrics": {k: v["desc"] for k, v in __import__("ccreator.fabric", fromlist=["FABRICS"]).FABRICS.items()},
+        "fabrics": {k: v["desc"] for k, v in __import__("kankuro.fabric", fromlist=["FABRICS"]).FABRICS.items()},
         "face_sliders": {k: {"range": r, "desc": d} for k, (d, _, r) in appearance.FACE_SLIDERS.items()},
         "face_presets": {k: v["desc"] for k, v in appearance.FACE_PRESETS.items()},
         "colors": {"skin": appearance.SKIN_TONES, "hair": appearance.HAIR_COLORS, "eyes": appearance.EYE_COLORS,
                    "usage": "any colour option takes #RRGGBB or one of these names"},
         "brows": {"keys": {k: {"default": d, "range": r, "desc": desc} for k, (d, r, desc) in appearance.BROW_KEYS.items()},
                   "presets": appearance.BROW_PRESETS},
-        "detail_morphs": f"{len(morph.modifier_catalog())} modifiers; list with `ccreator morphs`",
-        "animations": "list with `ccreator animations`",
-        "expressions": {"blendshapes": __import__("ccreator.face", fromlist=["ARKIT_NAMES"]).ARKIT_NAMES,
-                        "presets": list(__import__("ccreator.face", fromlist=["PRESETS"]).PRESETS),
-                        "usage": "ccreator render --focus head --expression smile  (or jawOpen=0.6,eyeBlinkLeft=1)"},
+        "detail_morphs": f"{len(morph.modifier_catalog())} modifiers; list with `kankuro morphs`",
+        "animations": "list with `kankuro animations`",
+        "expressions": {"blendshapes": __import__("kankuro.face", fromlist=["ARKIT_NAMES"]).ARKIT_NAMES,
+                        "presets": list(__import__("kankuro.face", fromlist=["PRESETS"]).PRESETS),
+                        "usage": "kankuro render --focus head --expression smile  (or jawOpen=0.6,eyeBlinkLeft=1)"},
     }
     if a.section:
         if a.section not in out:
@@ -110,7 +110,7 @@ def cmd_morphs(a):
         items.append({"name": name, "group": c["group"], "range": c["range"]})
     groups = sorted({c["group"] for c in cat.values()})
     return {"count": len(items), "groups": groups, "modifiers": items,
-            "usage": "ccreator set body.morphs.<name>=<value>  (e.g. body.morphs.nose/nose-scale-horiz-decr|incr=0.4)"}
+            "usage": "kankuro set body.morphs.<name>=<value>  (e.g. body.morphs.nose/nose-scale-horiz-decr|incr=0.4)"}
 
 
 def cmd_hair(a):
@@ -301,10 +301,10 @@ def cmd_render(a):
         if expr is None:
             raise CliError("bad_expression", f"Unknown expression or blendshape '{bad_name}'",
                            hint=f"Presets: {', '.join(face.PRESETS)}; or ARKit names with weights, e.g. "
-                                "jawOpen=0.6,mouthSmileLeft=1 (list them with `ccreator catalog expressions`)")
+                                "jawOpen=0.6,mouthSmileLeft=1 (list them with `kankuro catalog expressions`)")
         if s.get("face", {}).get("blendshapes", "arkit52") == "none":
             raise CliError("no_blendshapes", "This character is built without facial blendshapes",
-                           hint="ccreator set face.blendshapes=arkit52")
+                           hint="kankuro set face.blendshapes=arkit52")
     with util.quiet(_log(p)):
         b = build.build_scene(s, p, work)
         if expr:
@@ -364,10 +364,10 @@ def cmd_template(a):
             mask = os.path.join(out_dir, f"{gid}_mask.png")
             info = b.uv_info.get(gid, {})
             if info.get("labels"):
-                textures.uv_template(garments.uv_polygons(m), path, f"ccreator {gid} UV template ({info['layout']})",
+                textures.uv_template(garments.uv_polygons(m), path, f"kankuro {gid} UV template ({info['layout']})",
                                      size=a.size, mask_out=mask, labels=info["labels"], divider=False)
             else:
-                textures.uv_template(garments.uv_polygons(m), path, f"ccreator {gid} UV template - left: front view, right: back view (seen from behind)",
+                textures.uv_template(garments.uv_polygons(m), path, f"kankuro {gid} UV template - left: front view, right: back view (seen from behind)",
                                      size=a.size, mask_out=mask)
             results[gid] = {"template": path, "mask": mask, "layout": info.get("layout", "front_back_flat_sketch"),
                             "size": a.size}
@@ -379,14 +379,14 @@ def cmd_template(a):
         polys = [[tuple(uvs[i]) for i in fu] for fu in fuvs]
         path = os.path.join(out_dir, "body_template.png")
         mask = os.path.join(out_dir, "body_mask.png")
-        textures.uv_template(polys, path, "ccreator body skin UV template (MakeHuman UV layout)", size=a.size,
+        textures.uv_template(polys, path, "kankuro body skin UV template (MakeHuman UV layout)", size=a.size,
                              labels=(), mask_out=mask)
         results["body"] = {"template": path, "mask": mask, "layout": "makehuman_body"}
     return {"templates": results,
             "how_to_retexture": "Paint/generate a same-size image over the template (keep the garment inside the "
                                 "grey area; the mask is white where pixels are used), then run "
-                                "`ccreator garment set <id> --texture <png>` (or `ccreator set skin.texture` via "
-                                "`ccreator skin --texture <png>` for the body)."}
+                                "`kankuro garment set <id> --texture <png>` (or `kankuro set skin.texture` via "
+                                "`kankuro skin --texture <png>` for the body)."}
 
 
 def cmd_skin(a):
@@ -410,7 +410,7 @@ def _assignments(items, prefix=""):
     for item in items or []:
         if "=" not in item:
             raise CliError("bad_assignment", f"Expected slider=value, got '{item}'",
-                           hint="e.g. nose.width=0.4 eyes.tilt=-0.3 (see `ccreator face list`)")
+                           hint="e.g. nose.width=0.4 eyes.tilt=-0.3 (see `kankuro face list`)")
         k, v = item.split("=", 1)
         k = k.strip()
         if prefix and not k.startswith(prefix):
@@ -430,7 +430,7 @@ def cmd_face(a):
                    if not a.group or k.split(".")[0] == a.group}
         out = {"sliders": sliders, "groups": sorted({k.split(".")[0] for k in appearance.FACE_SLIDERS}),
                "presets": {k: v["desc"] for k, v in appearance.FACE_PRESETS.items()},
-               "usage": "ccreator face set nose.width=0.4 jaw.width=-0.3 | face preset angular | "
+               "usage": "kankuro face set nose.width=0.4 jaw.width=-0.3 | face preset angular | "
                         "face randomize --seed 7 --strength 0.6 | face reset"}
         try:
             out["current"] = _face_summary(specmod.load(_project(a)))["shape"]
@@ -482,7 +482,7 @@ def cmd_face(a):
     out = _face_summary(s)
     if a.action == "randomize":
         out["seed"] = face["seed"]
-    out["tip"] = "Check it with `ccreator render --focus head --views front,three_quarter,side`"
+    out["tip"] = "Check it with `kankuro render --focus head --views front,three_quarter,side`"
     return out
 
 
@@ -551,7 +551,7 @@ def cmd_animations(a):
         util.reset_scene()
         clips = anim.list_clips()
     return {"library": "Mesh2Motion human-base (CC0)", "count": len(clips), "clips": clips,
-            "usage": "ccreator build --animations Idle_A,Jog   (or --animations all)"}
+            "usage": "kankuro build --animations Idle_A,Jog   (or --animations all)"}
 
 
 def cmd_reference_body(a):
@@ -570,8 +570,8 @@ def cmd_reference_body(a):
             bo.parent = None
         bpy.ops.export_scene.gltf(filepath=p, export_format="GLB", use_selection=True, export_skins=a.with_rig)
     return {"glb": p, "note": "Neutral T-pose body (feet at z=0, facing -Y in Blender / +Z in glTF). Model custom "
-                             "garments or hair on top of it, export as GLB/OBJ, then `ccreator garment import` / "
-                             "`ccreator hair import`; they are conformed and skinned to any body shape."}
+                             "garments or hair on top of it, export as GLB/OBJ, then `kankuro garment import` / "
+                             "`kankuro hair import`; they are conformed and skinned to any body shape."}
 
 
 def cmd_autorig(a):
@@ -641,8 +641,8 @@ SCHEMA = {
 
 
 def parser():
-    ap = argparse.ArgumentParser(prog="ccreator", description="Character creator CLI (JSON output).")
-    ap.add_argument("-p", "--project", help="project directory (default: $CCREATOR_PROJECT or cwd)")
+    ap = argparse.ArgumentParser(prog="kankuro", description="Character creator CLI (JSON output).")
+    ap.add_argument("-p", "--project", help="project directory (default: $KANKURO_PROJECT or cwd)")
     ap.add_argument("--version", action="version", version=VERSION)
     sp = ap.add_subparsers(dest="cmd", required=True)
 
@@ -770,7 +770,7 @@ def main(argv=None):
         if e.code == 0:
             return 0
         return emit({"ok": False, "error": {"code": "bad_arguments", "message": "Invalid command line",
-                                            "hint": "Run `ccreator schema` or `ccreator <command> --help`"}}, 2)
+                                            "hint": "Run `kankuro schema` or `kankuro <command> --help`"}}, 2)
     try:
         if a.cmd == "hair" and a.action == "set" and not a.style and not a.color:
             raise CliError("missing_arg", "hair set needs a style", hint=f"Valid: {', '.join(catalog.HAIR_STYLES)}")

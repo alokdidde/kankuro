@@ -3,8 +3,7 @@
 Every command and option, with what it prints. For a guided walk-through, start with
 [getting-started.md](getting-started.md).
 
-The command is `kankuro`. `ccreator` is the same program under its original name (the Python
-package is `ccreator`, so `python -m ccreator` works too). Examples here use `kankuro`.
+The command is `kankuro`. `python -m kankuro` does the same thing.
 
 ```
 kankuro [-p PROJECT] [--version] <command> [options]
@@ -43,7 +42,7 @@ log never reaches stdout.
 
 * `ok` tells you whether it worked. On failure, `error.code` is a stable identifier you can branch
   on, `error.message` says what went wrong and `error.hint` usually says how to fix it.
-* Output is pretty-printed. Set `CCREATOR_COMPACT=1` to get one line per command, which is easier
+* Output is pretty-printed. Set `KANKURO_COMPACT=1` to get one line per command, which is easier
   to parse from scripts.
 
 ### Exit codes
@@ -61,7 +60,7 @@ A **project** is a folder with a `character.json` in it (the spec, see
 order:
 
 1. `-p DIR` / `--project DIR` (goes **before** the command: `kankuro -p ./hero build`)
-2. the `CCREATOR_PROJECT` environment variable
+2. the `KANKURO_PROJECT` environment variable
 3. the current directory
 
 `init`, `catalog`, `morphs`, `animations`, `reference-body`, `autorig`, `validate` and `schema` don't

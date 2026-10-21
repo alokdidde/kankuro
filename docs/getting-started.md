@@ -15,7 +15,7 @@ cd mira
 
 The project is the folder. Everything about the character lives in `mira/character.json`, and every
 file you add is copied into `mira/assets/`. Inside the folder you don't need `-p`; from elsewhere,
-use `kankuro -p ./mira <command>` or set `CCREATOR_PROJECT=./mira`.
+use `kankuro -p ./mira <command>` or set `KANKURO_PROJECT=./mira`.
 
 Presets are just starting slider values: `neutral`, `female`, `male`, `athletic_female`,
 `athletic_male`, `heavy_male`, `child`, `elder_female`, `elder_male`.

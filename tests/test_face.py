@@ -10,7 +10,7 @@ from test_cli import cc
 
 class FaceDeltas(unittest.TestCase):
     def test_all_52_move_the_face(self):
-        from ccreator import face, morph
+        from kankuro import face, morph
         co = morph.morphed_coords()
         self.assertEqual(len(face.ARKIT_NAMES), 52)
         d = face.deltas(co, face.ARKIT_NAMES)
@@ -21,7 +21,7 @@ class FaceDeltas(unittest.TestCase):
         self.assertGreater(np.abs(d["eyeBlinkLeft"][co[:, 0] > 0]).max(), 0.005)
 
     def test_parse_expression(self):
-        from ccreator import face
+        from kankuro import face
         w, bad = face.parse_expression("smile,jawOpen=0.3")
         self.assertIsNone(bad)
         self.assertEqual(w["jawOpen"], 0.3)

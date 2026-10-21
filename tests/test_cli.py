@@ -10,8 +10,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def cc(*args, project=None, ok=True):
-    env = dict(os.environ, CCREATOR_COMPACT="1", PYTHONPATH=ROOT)
-    cmd = [sys.executable, "-m", "ccreator"] + (["-p", project] if project else []) + list(args)
+    env = dict(os.environ, KANKURO_COMPACT="1", PYTHONPATH=ROOT)
+    cmd = [sys.executable, "-m", "kankuro"] + (["-p", project] if project else []) + list(args)
     r = subprocess.run(cmd, capture_output=True, text=True, env=env, cwd=ROOT)
     lines = [ln for ln in r.stdout.splitlines() if ln.strip()]
     assert len(lines) == 1, f"stdout must be exactly one JSON line, got: {r.stdout!r} {r.stderr[-500:]}"

@@ -3,8 +3,8 @@
 # Usage: tools/face_variety.sh [WORK_DIR] [SHEET_PNG]   (run from the repo root, PYTHONPATH=.)
 set -e
 OUT=${1:-/tmp/faces}; SHEET=${2:-examples/face_variety.png}; mkdir -p "$OUT"
-cc() { python3 -m ccreator -p "$P" "$@" > /dev/null; }
-mk() { P="$OUT/$1"; python3 -m ccreator init "$P" --preset "$2" --force > /dev/null; }
+cc() { python3 -m kankuro -p "$P" "$@" > /dev/null; }
+mk() { P="$OUT/$1"; python3 -m kankuro init "$P" --preset "$2" --force > /dev/null; }
 
 mk f1 female;      cc set body.macros.african=0.8 body.macros.caucasian=0.1 body.macros.asian=0.1
 cc face preset broad --amount 0.7; cc face randomize --seed 11 --strength 0.35 --add
@@ -35,7 +35,7 @@ mk m4 male;        cc set body.macros.african=0.6 body.macros.caucasian=0.4
 cc face randomize --seed 21 --strength 0.6; cc skin --color brown; cc hair set buzz --color black; cc eyes --color light_brown; cc brows --preset short
 
 for c in f1 m1 f2 m2 f3 m3 f4 m4; do
-  python3 -m ccreator -p "$OUT/$c" render --focus head --views front,three_quarter --size ${SIZE:-384} --samples ${SAMPLES:-16} > /dev/null
+  python3 -m kankuro -p "$OUT/$c" render --focus head --views front,three_quarter --size ${SIZE:-384} --samples ${SAMPLES:-16} > /dev/null
 done
 python3 - "$OUT" "$SHEET" <<'PY'
 import sys

@@ -46,8 +46,8 @@ jobs:
         run: |
           import os, re, tomllib
           v = tomllib.load(open("pyproject.toml", "rb"))["project"]["version"]
-          cli = re.search(r'^VERSION = "(.+)"', open("ccreator/cli.py").read(), re.M).group(1)
-          assert cli == v, f"ccreator/cli.py VERSION {cli} != pyproject.toml version {v}"
+          cli = re.search(r'^VERSION = "(.+)"', open("kankuro/cli.py").read(), re.M).group(1)
+          assert cli == v, f"kankuro/cli.py VERSION {cli} != pyproject.toml version {v}"
           ref = os.environ["GITHUB_REF"]
           if ref.startswith("refs/tags/"):
               tag = ref.removeprefix("refs/tags/")

@@ -6,7 +6,7 @@ at the bottom straight into an agent's instructions.
 
 ## The contract
 
-* **One JSON object on stdout per command.** Parse it. Never scrape logs. Set `CCREATOR_COMPACT=1`
+* **One JSON object on stdout per command.** Parse it. Never scrape logs. Set `KANKURO_COMPACT=1`
   for single-line output.
 * **`ok` first.** `true` means done. `false` means read `error.code` (stable, branch on it),
   `error.message` and `error.hint` (usually says exactly what to run instead).
@@ -87,7 +87,7 @@ independent processes, so separate projects can be built in parallel.
 ## System prompt snippet
 
 ```text
-You can build rigged 3D characters with the `kankuro` CLI (alias `ccreator`).
+You can build rigged 3D characters with the `kankuro` CLI.
 - Every command prints one JSON object. Check "ok"; on failure read error.code and error.hint and fix the input.
 - Start with `kankuro schema` and `kankuro catalog`. Never guess names; use `catalog`, `morphs --search`, `animations`.
 - A project is a folder with character.json. Create it with `kankuro init <dir> --preset <preset>`.

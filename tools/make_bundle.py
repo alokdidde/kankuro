@@ -25,12 +25,12 @@ PY_VERSION = "3.13"
 SH_LAUNCHER = """#!/bin/sh
 # kankuro launcher: runs the bundled Python with the kankuro CLI.
 here="$(cd "$(dirname "$0")" && pwd)"
-exec "$here/python/bin/python3" -I -m ccreator "$@"
+exec "$here/python/bin/python3" -I -m kankuro "$@"
 """
 
 CMD_LAUNCHER = """@echo off
 rem kankuro launcher: runs the bundled Python with the kankuro CLI.
-"%~dp0python\\python.exe" -I -m ccreator %*
+"%~dp0python\\python.exe" -I -m kankuro %*
 """
 
 README = """kankuro {version} ({name})
@@ -43,8 +43,6 @@ Run it from this folder (or add this folder to your PATH):
 
   Linux / macOS:   ./kankuro schema
   Windows:         kankuro.cmd schema
-
-`ccreator` is the same command under its original name.
 
 Docs: https://github.com/alokdidde/kankuro/tree/main/docs
 """
@@ -94,10 +92,10 @@ def main():
     # 2. kankuro + its dependencies (bpy, numpy, pillow) into that interpreter.
     run([python, "-I", "-m", "pip", "install", "--no-cache-dir", "--disable-pip-version-check", wheel])
     run([python, "-I", "-m", "pip", "check"])
-    run([python, "-I", "-m", "ccreator", "--version"])
+    run([python, "-I", "-m", "kankuro", "--version"])
 
     # 3. Launchers and a README.
-    for name in ("kankuro", "ccreator"):
+    for name in ("kankuro",):
         if WIN:
             with open(os.path.join(root, name + ".cmd"), "w", newline="\r\n") as f:
                 f.write(CMD_LAUNCHER)

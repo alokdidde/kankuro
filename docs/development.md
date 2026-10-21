@@ -14,22 +14,22 @@ If an editable install isn't possible (some network filesystems), install the de
 
 ```bash
 pip install "bpy==5.2.*" numpy pillow
-PYTHONPATH=. python -m ccreator schema
+PYTHONPATH=. python -m kankuro schema
 ```
 
 ## Code layout
 
 ```
-ccreator/cli.py            commands, argument parsing, JSON output
-ccreator/spec.py           character.json schema, presets, validation
-ccreator/morph.py          MakeHuman macro and detail morphs (numpy, no Blender)
-ccreator/catalog.py        hair styles and garment definitions
-ccreator/textures.py       skin map, UV templates
-ccreator/fabric.py         fabric relief: weave/stitch/fold height -> normal map, albedo bake
-ccreator/blender/*.py      body and skeleton fit, garments, hair, materials, render, anim, autorig, validate
-ccreator/data/             compiled CC0 assets (tools/build_data.py regenerates them)
+kankuro/cli.py            commands, argument parsing, JSON output
+kankuro/spec.py           character.json schema, presets, validation
+kankuro/morph.py          MakeHuman macro and detail morphs (numpy, no Blender)
+kankuro/catalog.py        hair styles and garment definitions
+kankuro/textures.py       skin map, UV templates
+kankuro/fabric.py         fabric relief: weave/stitch/fold height -> normal map, albedo bake
+kankuro/blender/*.py      body and skeleton fit, garments, hair, materials, render, anim, autorig, validate
+kankuro/data/             compiled CC0 assets (tools/build_data.py regenerates them)
 tests/test_cli.py          end-to-end tests through the CLI
-tools/build_data.py        rebuild ccreator/data from MakeHuman and Mesh2Motion sources
+tools/build_data.py        rebuild kankuro/data from MakeHuman and Mesh2Motion sources
 tools/make_bundle.py       build a self-contained release bundle
 tools/smoke_test.py        smoke-test an installed kankuro or a bundle
 ```
@@ -37,7 +37,7 @@ tools/smoke_test.py        smoke-test an installed kankuro or a bundle
 House rules:
 
 * Every command prints exactly one JSON object. Errors are `CliError(code, message, hint=...)`.
-* Modules under `ccreator/blender/` may import `bpy`; everything else must not, so spec commands
+* Modules under `kankuro/blender/` may import `bpy`; everything else must not, so spec commands
   stay instant.
 * New garments and hair styles go in `catalog.py`.
 
@@ -80,7 +80,7 @@ python tools/smoke_test.py ./unpacked/kankuro-0.1.0-linux-x64/kankuro     # afte
 
 ## Cutting a release
 
-1. Bump the version in **both** `pyproject.toml` (`version`) and `ccreator/cli.py` (`VERSION`).
+1. Bump the version in **both** `pyproject.toml` (`version`) and `kankuro/cli.py` (`VERSION`).
    The workflow refuses to release if they or the tag disagree.
 2. Commit and push to `main`, then either push a tag or push `main` to the `release` branch
    (which tags the release `v<version>` for you, handy where tag pushes aren't allowed):

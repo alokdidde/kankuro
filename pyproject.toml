@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kankuro"
-version = "0.1.0"
+version = "0.2.0"
 description = "Agent-friendly character creator CLI: MakeHuman body + Mesh2Motion skeleton, built with Blender (bpy)"
 readme = "README.md"
 license = "MIT"
@@ -28,11 +28,10 @@ Documentation = "https://github.com/alokdidde/kankuro/tree/main/docs"
 Issues = "https://github.com/alokdidde/kankuro/issues"
 
 [project.scripts]
-kankuro = "ccreator.cli:main"
-ccreator = "ccreator.cli:main"
+kankuro = "kankuro.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["ccreator*"]
+include = ["kankuro*"]
 
 [tool.setuptools.package-data]
-ccreator = ["data/*", "data/*/*"]
+kankuro = ["data/*", "data/*/*"]

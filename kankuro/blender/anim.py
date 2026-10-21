@@ -50,7 +50,7 @@ def attach(arm, names, library="human-base"):
         missing = [n for n in names if n not in by_name]
         if missing:
             raise CliError("unknown_animation", f"Unknown animation(s): {', '.join(missing)}",
-                           hint="Run `ccreator animations list` for valid clip names")
+                           hint="Run `kankuro animations list` for valid clip names")
         wanted = names
     bone_names = {b.name for b in arm.data.bones}
     if arm.animation_data is None:
@@ -94,7 +94,7 @@ def pose_at(arm, name, frame, library="human-base"):
     by_name = {a.name: a for a in acts}
     if name not in by_name:
         raise CliError("unknown_animation", f"Unknown animation '{name}'",
-                       hint="Run `ccreator animations list` for valid clip names")
+                       hint="Run `kankuro animations list` for valid clip names")
     act = by_name[name]
     if arm.animation_data is None:
         arm.animation_data_create()

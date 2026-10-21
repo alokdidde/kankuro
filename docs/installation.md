@@ -76,7 +76,6 @@ export PATH="$HOME/tools/kankuro-0.1.0-linux-x64:$PATH"
 ```
 
 The folder can be moved anywhere; the launchers find the bundled Python relative to themselves.
-`ccreator` (and `ccreator.cmd`) in the same folder is the same command.
 
 Check the download against `SHA256SUMS.txt` from the release if you want to be sure it's intact:
 `sha256sum -c SHA256SUMS.txt --ignore-missing`.

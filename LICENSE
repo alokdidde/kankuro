@@ -22,7 +22,7 @@ SOFTWARE.
 
 ---
 
-Third-party data bundled in ccreator/data/ is CC0 (public domain):
+Third-party data bundled in kankuro/data/ is CC0 (public domain):
 MakeHuman base mesh, targets, weights and eyes (makehumancommunity/makehuman) and
 the Mesh2Motion human rig and animations (scottpetrovic/mesh2motion-app).
 The release bundles also contain Python (PSF License) and Blender's bpy module

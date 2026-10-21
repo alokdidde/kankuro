@@ -23,9 +23,6 @@ in the spirit of Reallusion Character Creator, built on Blender and the Mesh2Mot
 **[CLI reference](docs/cli-reference.md)** · **[For AI agents](docs/agents.md)** ·
 **[Docs](docs/README.md)**
 
-The command is `kankuro`; `ccreator` is the same command under its original name, and the examples
-below use it.
-
 It's meant to be driven by AI agents: every command prints one JSON object, errors
 carry a `code` and a `hint`, the whole character lives in one inspectable `character.json`, and
 `render` produces PNGs the agent can look at.
@@ -71,32 +68,32 @@ troubleshooting: [docs/installation.md](docs/installation.md).
 ## Quick start
 
 ```bash
-ccreator init ./hero --preset athletic_male
-cd hero                                   # or pass -p ./hero, or set CCREATOR_PROJECT
-ccreator set body.height_cm=183 body.macros.weight=0.6
-ccreator face preset angular && ccreator face randomize --seed 7 --strength 0.3 --add   # give it its own face
-ccreator skin --color brown && ccreator eyes --color hazel && ccreator brows --preset thick
-ccreator hair set short --color "#1a1410"
-ccreator garment add tshirt --color "#eeeeee"
-ccreator garment add jacket --color "#3d5a40"
-ccreator garment add pants --color "#2b2b33"
-ccreator garment add boots
-ccreator render --views front,side            # look at renders/render_sheet.png
-ccreator render --focus head                  # face/hair close-up
-ccreator render --animation Jog --frame 0.3   # check deformation in motion
-ccreator build --animations Idle_A,Jog        # -> build/<name>.glb + build/manifest.json
-ccreator validate build/hero.glb
+kankuro init ./hero --preset athletic_male
+cd hero                                   # or pass -p ./hero, or set KANKURO_PROJECT
+kankuro set body.height_cm=183 body.macros.weight=0.6
+kankuro face preset angular && kankuro face randomize --seed 7 --strength 0.3 --add   # give it its own face
+kankuro skin --color brown && kankuro eyes --color hazel && kankuro brows --preset thick
+kankuro hair set short --color "#1a1410"
+kankuro garment add tshirt --color "#eeeeee"
+kankuro garment add jacket --color "#3d5a40"
+kankuro garment add pants --color "#2b2b33"
+kankuro garment add boots
+kankuro render --views front,side            # look at renders/render_sheet.png
+kankuro render --focus head                  # face/hair close-up
+kankuro render --animation Jog --frame 0.3   # check deformation in motion
+kankuro build --animations Idle_A,Jog        # -> build/<name>.glb + build/manifest.json
+kankuro validate build/hero.glb
 ```
 
 ## Retexturing clothes with an image model (outside the CLI)
 
 ```bash
-ccreator template tshirt          # templates/tshirt_template.png + tshirt_mask.png (2048 px)
+kankuro template tshirt          # templates/tshirt_template.png + tshirt_mask.png (2048 px)
 #   -> give the template to the image model: "paint a denim shirt design on this flat sketch,
 #      left = front, right = back seen from behind, keep inside the grey shape"
-ccreator garment set tshirt --texture ./denim_shirt.png
-ccreator garment set tshirt --height ./denim_shirt_height.png   # optional: greyscale relief, white = raised
-ccreator render --views front,back
+kankuro garment set tshirt --texture ./denim_shirt.png
+kankuro garment set tshirt --height ./denim_shirt_height.png   # optional: greyscale relief, white = raised
+kankuro render --views front,back
 ```
 
 The **saree** has its own layout: the pleated skirt's front and back flat sketches at the bottom and
@@ -121,14 +118,14 @@ and `normalTexture`. `export.texture_size` (default 2048) sets their resolution.
 [docs/codex-textures.md](docs/codex-textures.md) has the exact image-model prompts and file specs.
 
 The UV layout comes from a fixed reference body, so **one texture fits that garment on every body
-shape**. `ccreator template body` gives the skin layout (MakeHuman UVs) for `ccreator skin --texture`.
+shape**. `kankuro template body` gives the skin layout (MakeHuman UVs) for `kankuro skin --texture`.
 
 ## Custom garments and hair
 
 ```bash
-ccreator reference-body --out ref.glb          # neutral T-pose body to model on
-ccreator garment import --file hat.glb --id hat --color "#6b4f2a"
-ccreator hair import --file braids.glb --color "#2a1a10"
+kankuro reference-body --out ref.glb          # neutral T-pose body to model on
+kankuro garment import --file hat.glb --id hat --color "#6b4f2a"
+kankuro hair import --file braids.glb --color "#2a1a10"
 ```
 
 Imported meshes are moved onto the current body shape (a smooth displacement field from reference
@@ -137,7 +134,7 @@ body to current body), skinned from nearby body weights, and pushed out of the s
 ## Auto-rigging other meshes
 
 ```bash
-ccreator autorig model.glb --out model_rigged.glb --animations Idle_A --render ./check
+kankuro autorig model.glb --out model_rigged.glb --animations Idle_A --render ./check
 ```
 
 Any upright humanoid works: GLB/glTF/OBJ/FBX, T-pose or A-pose (arms down to ~70 degrees), with
@@ -174,13 +171,13 @@ targets, **10 archetype presets** and **seeded randomisation**. Values are store
 `character.json` and merged into the body morphs at build time.
 
 ```bash
-ccreator face list [--group nose]                  # sliders with ranges and descriptions, presets, current values
-ccreator face set nose.width=0.4 jaw.width=-0.3 chin.projection=0.5   # 0 removes a slider
-ccreator face preset angular                       # angular soft round long heart square delicate rugged aquiline broad
-ccreator face preset heart --amount 0.6 --add      # blend a preset on top of the current sliders
-ccreator face randomize --seed 42 --strength 0.5   # a new, plausible face; same seed = same face
-ccreator face randomize --groups nose,mouth --seed 3   # re-roll only some features
-ccreator face reset [--groups eyes]
+kankuro face list [--group nose]                  # sliders with ranges and descriptions, presets, current values
+kankuro face set nose.width=0.4 jaw.width=-0.3 chin.projection=0.5   # 0 removes a slider
+kankuro face preset angular                       # angular soft round long heart square delicate rugged aquiline broad
+kankuro face preset heart --amount 0.6 --add      # blend a preset on top of the current sliders
+kankuro face randomize --seed 42 --strength 0.5   # a new, plausible face; same seed = same face
+kankuro face randomize --groups nose,mouth --seed 3   # re-roll only some features
+kankuro face reset [--groups eyes]
 ```
 
 Slider groups: `head` (width, length, depth, fat, age, and 0..1 blends towards oval, round, square,
@@ -188,22 +185,22 @@ rectangular, triangular, heart, diamond), `forehead`, `brows` (brow ridge: heigh
 `nose`, `mouth`, `jaw`, `chin`, `cheeks`, `ears`, `neck`. Bipolar sliders run -1..1 with 0 = unchanged;
 about ±0.3 is a subtle change, ±0.6 clear, ±1 extreme. `--strength` for `randomize`: 0.3 subtle, 0.5
 natural (the default), 1 caricature. The seed is saved in `face.seed`.
-The raw MakeHuman modifiers (`ccreator morphs`) still work and add to the sliders.
+The raw MakeHuman modifiers (`kankuro morphs`) still work and add to the sliders.
 
-**Colours.** Every colour option takes `#RRGGBB` or a name from its palette (`ccreator catalog colors`):
+**Colours.** Every colour option takes `#RRGGBB` or a name from its palette (`kankuro catalog colors`):
 
 ```bash
-ccreator skin --color tan              # whole body. porcelain fair light light_olive medium olive tan golden_brown
+kankuro skin --color tan              # whole body. porcelain fair light light_olive medium olive tan golden_brown
                                        #   brown dark_brown deep ebony (+ pale_grey orc_green blue)
-ccreator hair set long --color auburn  # black soft_black dark_brown brown chestnut auburn copper ginger light_brown
+kankuro hair set long --color auburn  # black soft_black dark_brown brown chestnut auburn copper ginger light_brown
                                        #   dark_blonde blonde platinum ash_blonde grey salt_pepper white + dyed colours
-ccreator hair set --color platinum     # recolour the current hair, keep the style
+kankuro hair set --color platinum     # recolour the current hair, keep the style
 ```
 
 **Eyes.** Iris colour plus the `eyes.*` sliders, without the prefix:
 
 ```bash
-ccreator eyes --color hazel size=0.3 tilt=0.4 monolid=0.5
+kankuro eyes --color hazel size=0.3 tilt=0.4 monolid=0.5
 #   colours: dark_brown brown light_brown amber hazel green grey_green grey blue light_blue steel_blue violet red gold
 #   shape:   size spacing height tilt (up = cat-eye) openness width lid_crease lid_fold monolid bags
 ```
@@ -211,10 +208,10 @@ ccreator eyes --color hazel size=0.3 tilt=0.4 monolid=0.5
 **Eyebrows.** Hair shape and colour, plus the brow-ridge sliders (`brows.*`):
 
 ```bash
-ccreator brows --preset arched --color dark_brown   # natural thin thick bushy straight arched sparse short
-ccreator brows --thickness 1.3 --arch -0.5 --density 1.2 --length 0.9 height=0.2 ridge=0.3
-ccreator brows --color hair                         # follow the hair colour (the default)
-ccreator brows --off                                # no eyebrows
+kankuro brows --preset arched --color dark_brown   # natural thin thick bushy straight arched sparse short
+kankuro brows --thickness 1.3 --arch -0.5 --density 1.2 --length 0.9 height=0.2 ridge=0.3
+kankuro brows --color hair                         # follow the hair colour (the default)
+kankuro brows --off                                # no eyebrows
 ```
 
 `--thickness` 0.3..2 (1 natural), `--arch` -1 flat .. 1 high, `--density` 0.2..2, `--length` 0.5..1.4. They
@@ -230,10 +227,10 @@ are stored as `skin.brow_thickness`, `brow_arch`, `brow_density`, `brow_length` 
 directly. They don't touch the skeleton, so the Mesh2Motion rig and its clips are unchanged.
 
 ```bash
-ccreator render --focus head --expression smile                  # presets: smile laugh surprise angry sad blink kiss
-ccreator render --focus head --expression jawOpen=0.6,eyeBlinkLeft=1,smile
-ccreator catalog expressions                                     # the 52 names and the presets
-ccreator set face.blendshapes=none                               # leave them out (smaller GLB)
+kankuro render --focus head --expression smile                  # presets: smile laugh surprise angry sad blink kiss
+kankuro render --focus head --expression jawOpen=0.6,eyeBlinkLeft=1,smile
+kankuro catalog expressions                                     # the 52 names and the presets
+kankuro set face.blendshapes=none                               # leave them out (smaller GLB)
 ```
 
 The shapes are generated for each character from MakeHuman's CC0 face data, so they fit any body and face
@@ -249,7 +246,7 @@ shapes, so they look plain in close-ups.
 
 ## Commands
 
-Run `ccreator schema` for the machine-readable list. In brief:
+Run `kankuro schema` for the machine-readable list. In brief:
 
 | command | purpose |
 |---|---|
@@ -285,16 +282,16 @@ rest. Bones follow Mesh2Motion `rig-human` (`root`, `pelvis`, `spine_01..03`, `n
 ## Layout
 
 ```
-ccreator/cli.py            commands, JSON I/O
-ccreator/spec.py           character.json schema, presets, validation
-ccreator/morph.py          MakeHuman macro/detail morphs (numpy)
-ccreator/face.py           ARKit 52 facial blendshapes from MakeHuman face units (numpy)
-ccreator/appearance.py     face shape sliders, face presets, randomisation, named colours, eyebrow keys
-ccreator/catalog.py        hair styles and garment definitions
-ccreator/textures.py       skin map, UV templates
-ccreator/fabric.py         fabric relief: weave/stitch/fold height -> normal map, albedo bake
-ccreator/blender/*.py      body + skeleton fit, garments, hair, materials, render, anim, autorig, validate
-ccreator/data/             compiled CC0 assets (tools/build_data.py regenerates them)
+kankuro/cli.py            commands, JSON I/O
+kankuro/spec.py           character.json schema, presets, validation
+kankuro/morph.py          MakeHuman macro/detail morphs (numpy)
+kankuro/face.py           ARKit 52 facial blendshapes from MakeHuman face units (numpy)
+kankuro/appearance.py     face shape sliders, face presets, randomisation, named colours, eyebrow keys
+kankuro/catalog.py        hair styles and garment definitions
+kankuro/textures.py       skin map, UV templates
+kankuro/fabric.py         fabric relief: weave/stitch/fold height -> normal map, albedo bake
+kankuro/blender/*.py      body + skeleton fit, garments, hair, materials, render, anim, autorig, validate
+kankuro/data/             compiled CC0 assets (tools/build_data.py regenerates them)
 tests/test_cli.py          end-to-end tests (python -m unittest discover tests)
 ```
 
@@ -303,7 +300,7 @@ tests/test_cli.py          end-to-end tests (python -m unittest discover tests)
 * MakeHuman base mesh, morph targets, skin weights, eyes, face pose units and expression targets: **CC0**
   (makehumancommunity/makehuman).
 * Mesh2Motion human rig and animation clips: **CC0** (scottpetrovic/mesh2motion-app).
-* `tools/build_data.py` recompiles `ccreator/data` from those repositories.
+* `tools/build_data.py` recompiles `kankuro/data` from those repositories.
 
 ## Documentation
 

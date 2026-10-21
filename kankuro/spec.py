@@ -52,7 +52,7 @@ def load(project):
     p = project_path(project)
     if not os.path.exists(p):
         raise CliError("no_project", f"No {SPEC_FILE} in '{project}'",
-                       hint="Create one with `ccreator init <dir>` or pass --project <dir>")
+                       hint="Create one with `kankuro init <dir>` or pass --project <dir>")
     with open(p) as f:
         try:
             spec = json.load(f)
@@ -71,14 +71,14 @@ def save(project, spec):
 
 
 def color(value, field, palette=None):
-    """#RRGGBB or a colour name (`ccreator catalog colors`) -> '#rrggbb'."""
+    """#RRGGBB or a colour name (`kankuro catalog colors`) -> '#rrggbb'."""
     if value is None:
         return None
     named = appearance.named_color(value, palette)
     if named:
         return named
     if not isinstance(value, str) or not HEX.match(value):
-        names = ", ".join(appearance.PALETTES[palette]) if palette else "see `ccreator catalog colors`"
+        names = ", ".join(appearance.PALETTES[palette]) if palette else "see `kankuro catalog colors`"
         raise CliError("bad_color", f"{field}: '{value}' is not a hex colour or a known colour name",
                        hint=f"Use #RRGGBB (e.g. #a0522d) or a name: {names}")
     return "#" + value.lstrip("#").lower()
@@ -216,7 +216,7 @@ def set_path(spec, path, value):
                 raise CliError("bad_value", f"{path} must be a number")
             if name not in morph.modifier_catalog():
                 raise CliError("unknown_modifier", f"Unknown morph modifier '{name}'",
-                               hint="Run `ccreator morphs list` (optionally --search <text>)")
+                               hint="Run `kankuro morphs list` (optionally --search <text>)")
             spec["body"]["morphs"][name] = float(value)
         return spec
     if path.startswith("face.shape.") and len(parts) == 4:
