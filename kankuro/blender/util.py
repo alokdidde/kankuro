@@ -7,6 +7,16 @@ import bpy
 import numpy as np
 
 
+def _cflush():
+    """Flush C stdio: Blender's C code (the OBJ importer, ...) printf()s, which on a pipe is buffered
+    and would otherwise come out after the descriptors are restored."""
+    try:
+        import ctypes
+        ctypes.CDLL(None).fflush(None)
+    except (OSError, AttributeError):  # no C library to call (Windows uses a different one)
+        pass
+
+
 @contextlib.contextmanager
 def quiet(log_path=None):
     """Silence Blender's C-level stdout chatter (keeps our JSON stdout clean).
@@ -14,6 +24,7 @@ def quiet(log_path=None):
     Output is appended to log_path when given, else discarded."""
     sys.stdout.flush()
     sys.stderr.flush()
+    _cflush()
     target = open(log_path, "a") if log_path else open(os.devnull, "w")
     saved_out, saved_err = os.dup(1), os.dup(2)
     os.dup2(target.fileno(), 1)
@@ -23,6 +34,7 @@ def quiet(log_path=None):
     finally:
         sys.stdout.flush()
         sys.stderr.flush()
+        _cflush()
         os.dup2(saved_out, 1)
         os.dup2(saved_err, 2)
         os.close(saved_out)
