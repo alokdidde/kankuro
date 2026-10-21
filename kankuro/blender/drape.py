@@ -11,9 +11,10 @@ from mathutils.bvhtree import BVHTree
 
 from . import util
 
-# The pallu follows the torso (and the left clavicle where it sits on the shoulder), not the arms or legs
-PALLU_BONES = ("pelvis", "spine_01", "spine_02", "spine_03", "clavicle_l")
-ROWS, COLS = 96, 13
+# The pallu follows the torso (and the left shoulder where it sits on it, so the blouse sleeve can't
+# poke through when the arm comes down), not the legs
+PALLU_BONES = ("pelvis", "spine_01", "spine_02", "spine_03", "clavicle_l", "upperarm_l")
+ROWS, COLS = 150, 25
 UV_MARGIN = 0.03
 
 
@@ -107,28 +108,90 @@ def _anchors(res, bvh, waist_z, drop):
         front(sx - 0.02, tz(0.9)),
         _ray(bvh, (sx, yc, 3.0), (0, 0, -1)),          # gathered on top of the left shoulder
         back(sx - 0.02, tz(0.86)),
-        back(0.08, tz(0.55)),
-        back(0.05, waist_z),
-        back(0.04, waist_z - drop),                    # hanging end
+        back(0.07, tz(0.55)),
+        back(0.04, waist_z),
+        back(0.03, waist_z - drop),                    # hanging end
     ]
-    widths = [0.18, 0.32, 0.36, 0.16, 0.10, 0.18, 0.26, 0.27, 0.28]
+    widths = [0.18, 0.32, 0.36, 0.16, 0.10, 0.18, 0.25, 0.26, 0.26]
     if any(p is None for p in pts):
         raise RuntimeError("pallu path missed the body")
     return np.array(pts), np.array(widths), 4
 
 
-def _relax(P, pinned, bvhs, gap, iters=12):
-    """Smooth out wrinkles from the initial wrap: Laplacian smoothing over the grid (along the strip
-    only on its long edges, so it keeps its width), each step wrapped back onto the surface it lies on."""
+def _heights(p, bvhs, gap):
+    """Nearest skin point, its normal, the point's height above the skin, and the height it needs to
+    clear every worn layer along that normal by `gap`."""
+    body, outer = bvhs[0], bvhs[1:]
+    loc, nrm, _, _ = body.find_nearest(Vector(p))
+    if loc is None:
+        return None
+    need = 0.0
+    for b in outer:
+        hit = b.ray_cast(loc + nrm * 0.0005, nrm, 0.04)  # only layers close to the skin (not a far wall)
+        if hit[0] is not None:
+            need = max(need, hit[3])
+    return loc, nrm, (Vector(p) - loc).dot(nrm), need + gap
+
+
+def _grid_normals(X):
+    """Normals of the strip grid (rows x cols x 3), oriented to agree with `ref` later."""
+    du = np.gradient(X, axis=0)
+    dv = np.gradient(X, axis=1)
+    n = np.cross(du, dv)
+    return n / np.maximum(np.linalg.norm(n, axis=2, keepdims=True), 1e-9)
+
+
+def _push_out(X, bvhs, gap, cling=None):
+    """Move points that are inside the body or the clothes under them (or closer than `gap`) out of
+    the surface; points already clear of it stay where they are. The clearance each point needs is
+    blurred over the grid and points move along the cloth's own normal, so small sharp features
+    under the cloth (a blouse hem, the nipples) are bridged instead of pulling single vertices into
+    spikes. `cling` (per point, 0..1) pulls points that far towards the surface (the weight of cloth
+    hanging against the back)."""
+    R, Cn = X.shape[:2]
+    h = np.zeros((R, Cn))
+    need = np.zeros((R, Cn))
+    sn = np.zeros((R, Cn, 3))
+    for i in range(R):
+        for j in range(Cn):
+            r = _heights(X[i, j], bvhs, gap)
+            if r is None:
+                h[i, j], need[i, j] = 1.0, 0.0
+                continue
+            h[i, j], need[i, j], sn[i, j] = r[2], r[3], np.array(r[1])
+    for _ in range(2):
+        nb = need.copy()
+        nb[1:-1] = (need[:-2] + need[1:-1] + need[2:]) / 3
+        nb[:, 1:-1] = (nb[:, :-2] + nb[:, 1:-1] + nb[:, 2:]) / 3
+        need = np.maximum(need, nb)
+    gn = _grid_normals(X)
+    gn *= np.sign(np.sum(gn * sn, axis=2, keepdims=True) + 1e-12)  # point away from the body
+    cos = np.clip(np.sum(gn * sn, axis=2), 0.3, 1.0)
+    d = np.maximum(need - h, 0) / cos
+    if cling is not None:
+        d -= cling * np.maximum(h - need, 0)
+    return X + gn * d[..., None]
+
+
+def _relax(P, pinned, bvhs, gap, iters=40, cling=None):
+    """Settle the strip like cloth under tension: Laplacian smoothing over the grid (along the strip
+    only on its long edges, so it keeps its width), with points only ever pushed back *out* of the
+    surface. Over convex parts (bust, shoulder blades) it lies on the body; across hollows (under the
+    bust, the small of the back) it spans them instead of being sucked into the crease."""
     X = P.copy()
     free = ~pinned
     for _ in range(iters):
         L = np.zeros_like(X)
         L[1:-1] += 0.5 * (X[:-2] + X[2:]) - X[1:-1]
         L[:, 1:-1] += 0.5 * (X[:, :-2] + X[:, 2:]) - X[:, 1:-1]
-        X[free] += 0.4 * L[free]
-        X = _wrap(X.reshape(-1, 3), bvhs, gap).reshape(X.shape)
+        X[free] += 0.5 * L[free]
+        X = _push_out(X, bvhs, gap, cling)
     return X
+
+
+def _outward(X, bvhs):
+    """Unit skin normal under each point."""
+    return np.array([np.array(bvhs[0].find_nearest(Vector(p))[1]) for p in X.reshape(-1, 3)]).reshape(X.shape)
 
 
 def pallu(res, body_obj, skirt_obj, worn, gdef, uvinfo):
@@ -146,6 +209,9 @@ def pallu(res, body_obj, skirt_obj, worn, gdef, uvinfo):
     T = np.gradient(C, axis=0)
     T /= np.linalg.norm(T, axis=1, keepdims=True)
     N = np.array([np.array(bvh[0].find_nearest(Vector(c))[1]) for c in C])
+    for _ in range(8):  # the skin normal jumps around where the path turns; the cloth doesn't
+        N[1:-1] = 0.5 * N[1:-1] + 0.25 * (N[:-2] + N[2:])
+    N /= np.linalg.norm(N, axis=1, keepdims=True)
     B = np.cross(T, N)
     B /= np.linalg.norm(B, axis=1, keepdims=True)
     for i in range(1, ROWS):  # no twists
@@ -153,23 +219,40 @@ def pallu(res, body_obj, skirt_obj, worn, gdef, uvinfo):
             B[i] = -B[i]
     across = np.linspace(-0.5, 0.5, COLS)
     P = C[:, None, :] + B[:, None, :] * (w[:, None] * across[None, :])[..., None]
-    P = _wrap(P.reshape(-1, 3), bvh, gap).reshape(ROWS, COLS, 3)
+    # lay each point on the surface by looking at it from outside, along its row's normal (the
+    # nearest skin point can be on the wrong side of the body where the strip turns at the waist)
+    for i in range(ROWS):
+        for j in range(COLS):
+            hit = _ray(bvh, P[i, j] + N[i] * 0.25, -N[i])
+            P[i, j] = hit + N[i] * gap if hit is not None else _wrap(P[i, j][None], bvh, gap)[0]
     pinned = np.zeros((ROWS, COLS), dtype=bool)
-    pinned[0] = pinned[-1] = True
+    pinned[0] = True  # tucked into the waist at the right hip
     pin = int(round(afrac[pin_anchor] * (ROWS - 1)))
-    pinned[pin] = True
-    P = _relax(P, pinned, bvh, gap, p.get("relax", 12))
-    # Down the back the pallu hangs from the shoulder blades instead of hugging the small of the back
-    # and the hips: going down, each column never comes closer to the body than it was above
-    # (characters face -Y, so the back is +Y), and below the hips it falls straight. Soft vertical
-    # folds open up towards the hanging end.
+    pinned[pin] = True  # gathered on the left shoulder
+    # down the back the cloth hangs against the body under its own weight rather than spanning the
+    # small of the back like a drum skin
+    cling = np.zeros((ROWS, COLS))
+    cling[pin + 1:] = p.get("cling", 0.2)
+    P = _relax(P, pinned, bvh, gap, p.get("relax", 40), cling)
+    # Down the back the pallu lies on the shoulder blades, the back and the seat. Below the fullest
+    # point of the seat it no longer follows the body in: it falls straight (characters face -Y, so
+    # the back is +Y), and its sides fall straight down rather than wrapping round the hips.
     i0 = pin + 1
-    P[i0:, :, 1] = np.maximum.accumulate(P[i0:, :, 1], axis=0)
-    hang = C[i0:, 2] < waist_z + 0.1  # below the waist it hangs flat rather than wrapping round the hips
-    P[i0:][hang, :, 0] = C[i0:][hang, None, 0] + B[i0:][hang, None, 0] * (w[i0:][hang, None] * across[None, :])
-    k = np.clip((C[i0, 2] - C[i0:, 2]) / max(C[i0, 2] - C[-1, 2], 1e-6), 0, 1)
+    seat = i0 + int(np.argmax(P[i0:, COLS // 2, 1]))
+    below = np.arange(ROWS) >= seat
+    P[seat:, :, 1] = np.maximum.accumulate(P[seat:, :, 1], axis=0)
+    P[seat:, :, 0] = P[seat, None, :, 0] + (P[seat:, :, 0] - P[seat, None, :, 0]) * 0.3
+    # a level hem: the last rows share the height of the centre line
+    tail = max(ROWS - seat, 1)
+    k_hem = np.clip((np.arange(ROWS) - seat) / tail, 0, 1) ** 2 * below
+    P[:, :, 2] += k_hem[:, None] * (P[:, COLS // 2, 2][:, None] - P[:, :, 2])
+    # ease out kinks left where the hanging part leaves the body
+    P = _relax(P, pinned, bvh, gap, 4)
+    # soft vertical folds that open up towards the hanging end, always outward (away from the back)
+    k = np.clip((C[i0, 2] - C[:, 2]) / max(C[i0, 2] - C[-1, 2], 1e-6), 0, 1) * (np.arange(ROWS) >= i0)
     ripple = np.sin(np.pi * 3 * (across + 0.5)) ** 2
-    P[i0:, :, 1] += p.get("folds", 0.012) * (k ** 1.5)[:, None] * ripple[None, :]
+    n_out = _outward(P, bvh)
+    P += n_out * (p.get("folds", 0.012) * (k ** 1.5)[:, None] * ripple[None, :])[..., None]
     # faces + UVs: the strip unrolled along the top of the texture
     idx = np.arange(ROWS * COLS).reshape(ROWS, COLS)
     faces = np.stack([idx[:-1, :-1], idx[1:, :-1], idx[1:, 1:], idx[:-1, 1:]], axis=-1).reshape(-1, 4)

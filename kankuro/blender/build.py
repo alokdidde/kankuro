@@ -219,34 +219,53 @@ def reference_coords():
     return reference_body().coords
 
 
-def hide_body(body_obj, covers, max_dist=0.06):
-    """Delete body faces fully covered by clothing (prevents skin poking through when animated)."""
+def _covered(body_obj, covers, max_dist):
+    """Body vertices that have clothing within max_dist along their normal."""
+    co = util.get_coords(body_obj)
+    hidden = np.zeros(len(co), dtype=bool)
     if not covers:
-        return 0
+        return hidden
     tris, cos = [], []
     off = 0
     for o in covers:
-        co = util.get_coords(o)
+        gco = util.get_coords(o)
         o.data.calc_loop_triangles()
         for t in o.data.loop_triangles:
             tris.append([off + v for v in t.vertices])
-        cos.extend(co.tolist())
-        off += len(co)
+        cos.extend(gco.tolist())
+        off += len(gco)
     bvh = BVHTree.FromPolygons([Vector(c) for c in cos], tris)
     me = body_obj.data
     me.update()
-    co = util.get_coords(body_obj)
     nrm = np.empty(len(co) * 3)
     me.vertices.foreach_get("normal", nrm)
     nrm = nrm.reshape(-1, 3)
-    hidden = np.zeros(len(co), dtype=bool)
     for i in range(len(co)):
         n = Vector(nrm[i])
-        hit = bvh.ray_cast(Vector(co[i]) + n * 0.0005, n, max_dist)
-        if hit[0] is None:
-            continue
-        # also require coverage sideways so seams/hems keep some skin underneath
-        hidden[i] = True
+        hidden[i] = bvh.ray_cast(Vector(co[i]) + n * 0.0005, n, max_dist)[0] is not None
+    return hidden
+
+
+def _leg_verts(body_obj, res):
+    """Body vertices on the legs below the hip joints."""
+    W = util.weight_matrix(body_obj, res.bones)
+    legs = [res.bones.index(b) for side in "lr" for b in garments.LEG_CHAINS[side] if b in res.bones]
+    z = util.get_coords(body_obj)[:, 2]
+    return (W[:, legs].sum(1) > 0.5) & (z < res.arm.data.bones["thigh_l"].head_local.z)
+
+
+def hide_body(body_obj, covers, max_dist=0.06, hanging=(), legs=None):
+    """Delete body faces fully covered by clothing (prevents skin poking through when animated).
+    `hanging` garments (skirts, saree, a tunic's skirt) swing away from the legs on a stride, so
+    they never hide the leg vertices (`legs` mask): only fitted garments do."""
+    if not covers:
+        return 0
+    me = body_obj.data
+    co = util.get_coords(body_obj)
+    hidden = _covered(body_obj, covers, max_dist)
+    if hanging and legs is not None:
+        fitted = _covered(body_obj, [o for o in covers if o not in hanging], max_dist)
+        hidden = np.where(legs, fitted, hidden)
     # erode: keep a ring of skin under every hem
     adj = [[] for _ in range(len(co))]
     for e in me.edges:
@@ -420,7 +439,7 @@ def build_scene(spec, project, work_dir):
         t = _tick(b, "brows", t)
 
     # garments, inner layers first
-    covers, covers_all, to_shade = [], [], []
+    covers, covers_all, to_shade, hanging = [], [], [], []
     order = sorted(spec["garments"], key=lambda g: (g.get("layer", catalog.GARMENTS.get(g.get("type"), {}).get("layer", 1))))
     for rank, g in enumerate(order):
         if g.get("source"):
@@ -444,6 +463,9 @@ def build_scene(spec, project, work_dir):
         gobj["garment_id"] = g["id"]
         if g.get("hide_body", True):
             covers.append(gobj)
+            gd = catalog.GARMENTS.get(g.get("type"), {})
+            if gd.get("source_group") == "helper-skirt" or "flare" in gd:
+                hanging.append(gobj)
         covers_all.append((gobj, layer_of(g)))
         b.meshes.append(gobj)
     if spec["garments"]:
@@ -454,7 +476,7 @@ def build_scene(spec, project, work_dir):
     if "res" in _REF:
         bpy.data.objects.remove(_REF.pop("res").arm, do_unlink=True)
     if spec["export"].get("hide_body_under_clothes", True) and covers:
-        n = hide_body(body_obj, covers)
+        n = hide_body(body_obj, covers, hanging=hanging, legs=_leg_verts(body_obj, res))
         b.hidden_faces = n
         t = _tick(b, "hide_body", t)
     return b

@@ -59,6 +59,7 @@ HAIR_STYLES = {
 #   drape "dupatta": a scarf laid along a path over the body, not cut from a helper (`width` of the cloth,
 #          `drop` = low point of the front U from mid-back (0) to the neck (1), `end` = hanging ends
 #          from the hip joint (0) to the knee (1))
+#   a_line: a skirt flares out by this many metres at the hem, leaving room for the legs on a stride
 #   gathers: bunched rings of cloth over the lower leg, from `from` (0 = knee, 1 = ankle)
 GARMENTS = {
     "tshirt": {
@@ -99,6 +100,7 @@ GARMENTS = {
     "long_skirt": {
         "fabric": "silk", "desc": "Ankle-length skirt (MakeHuman skirt helper)", "slot": "bottom", "layer": 2, "offset": 0.004,
         "source_group": "helper-skirt", "length": 1.0,
+        "a_line": 0.04,
     },
     "blouse": {
         "fabric": "silk", "desc": "Cropped sari blouse (choli): short sleeves, scoop neck, ends under the bust",
@@ -112,7 +114,7 @@ GARMENTS = {
         "slot": "bottom", "layer": 3, "offset": 0.004, "source_group": "helper-skirt", "length": 1.0,
         # hem: height above the floor; pleats: front panel x range, fold count/depth, flare at the hem;
         # pallu: how far its end hangs below the waist at the back, gap over what it lies on
-        "drape": "saree", "subdiv": 2, "hem": 0.025, "weight_smooth": 30,
+        "drape": "saree", "subdiv": 2, "hem": 0.025, "weight_smooth": 30, "a_line": 0.05,
         "pleats": {"x": [-0.075, 0.085], "folds": 7, "depth": 0.014, "flare": 0.03},
         "pallu": {"drop": 0.45, "gap": 0.007},
     },

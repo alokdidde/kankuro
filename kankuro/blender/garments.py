@@ -447,7 +447,23 @@ def _shape(res, gdef, gid, verts, faces_local, keep):
     if gdef.get("drape") == "saree":
         from . import drape
         drape.shape_skirt(obj, res, gdef)
+    if gdef.get("a_line"):
+        _a_line(obj, res, gdef["a_line"])
     return obj
+
+
+def _a_line(obj, res, amount):
+    """Flare a skirt out towards the hem (A-line), from nothing at the hips to `amount` metres at the
+    hem, so there is room for the legs on a stride."""
+    co = util.get_coords(obj)
+    z_hip = res.arm.data.bones["thigh_l"].head_local.z
+    bot = co[:, 2].min()
+    c = np.array([0.0, (co[:, 1].min() + co[:, 1].max()) / 2])
+    d = co[:, :2] - c
+    r = np.maximum(np.linalg.norm(d, axis=1), 1e-6)
+    f = np.clip((z_hip - co[:, 2]) / max(z_hip - bot, 1e-6), 0, 1) ** 1.3
+    co[:, :2] += d / r[:, None] * (amount * f)[:, None]
+    util.set_coords(obj, co)
 
 
 _UV_CACHE = {}
@@ -482,6 +498,54 @@ def skin_from_body(obj, body_obj, bones, smooth_iters=10, smooth_factor=0.5):
         np.add.at(acc, e[:, 0], W[e[:, 1]])
         np.add.at(acc, e[:, 1], W[e[:, 0]])
         W = (1 - smooth_factor) * W + smooth_factor * acc / deg[:, None]
+    util.set_weight_matrix(obj, W, bones)
+
+
+LEG_CHAINS = {side: [f"{b}_{side}" for b in ("thigh", "calf", "foot", "ball", "ball_leaf")] for side in "lr"}
+
+
+def skirt_weights(obj, res, below=None):
+    """Skin a skirt as one hanging tube rather than two trouser legs.
+
+    * Leg influence depends on height only: none at the waist, full from the crotch down, so the
+      cloth over the front of the thigh moves with it and the leg can't poke through.
+    * It goes to the two thighs only (the knee doesn't bend the cloth like a trouser leg), shared by
+      how far the vertex is to the side: the centre front and back follow both thighs equally, so the
+      cloth there stretches across between the legs on a stride instead of splitting; the cloth over
+      each leg follows that leg.
+    * Below the knee it is scaled down so the cloth moves about as far as the knee does instead of
+      flying out like a stiff cone (it hangs from the knee rather than swinging with the whole leg);
+      only the cloth behind the calves follows them.
+    `below`: only vertices under this height are changed (the skirt part of a tunic)."""
+    bones = res.bones
+    W = util.weight_matrix(obj, bones)
+    co = util.get_coords(obj)
+    z = co[:, 2]
+    bl = res.arm.data.bones
+    z_hip, z_knee = bl["thigh_l"].head_local.z, bl["calf_l"].head_local.z
+    z_waist, z_crotch = bl["pelvis"].head_local.z + 0.03, z_hip - 0.1
+    sel = np.ones(len(co), dtype=bool) if below is None else z < below
+    hx = abs(bl["thigh_l"].head_local.x)
+    li = [bones.index(b) for b in LEG_CHAINS["l"] if b in bones]
+    ri = [bones.index(b) for b in LEG_CHAINS["r"] if b in bones]
+    t = np.clip((z_waist - z) / (z_waist - z_crotch), 0, 1)
+    leg = t * t * (3 - 2 * t)
+    leg *= np.minimum(1.0, (z_hip - z_knee) / np.maximum(z_hip - z, 1e-6))
+    s = np.clip(0.5 + 0.5 * co[:, 0] / (0.6 * hx), 0, 1)  # share of the left thigh (+X is the left)
+    N = W.copy()
+    N[:, li + ri] = 0
+    rest = N.sum(1)
+    N[rest < 1e-6, bones.index("pelvis")] = 1.0
+    N /= N.sum(1, keepdims=True)
+    # behind the calves the cloth follows them too, so a heel lifting on the back leg of a stride
+    # lifts the hem instead of poking through it
+    knee_y = bl["calf_l"].head_local.y
+    cf = 0.8 * np.clip((co[:, 1] - knee_y) / 0.04, 0, 1) * np.clip((z_knee - z) / 0.1, 0, 1)
+    N *= ((1 - leg) * (1 - cf))[:, None]
+    for side, share in (("l", s), ("r", 1 - s)):
+        N[:, bones.index(f"thigh_{side}")] = leg * (1 - cf) * share
+        N[:, bones.index(f"calf_{side}")] = cf * share
+    W[sel] = N[sel]
     util.set_weight_matrix(obj, W, bones)
 
 
@@ -556,6 +620,10 @@ def make(res, ref_res, body_obj, gid, gtype, layer_rank=0, worn=None):
     # Stacking on garments already worn is handled by conform_over; the layer only nudges the gap
     gap = gdef["offset"] + 0.001 * layer_rank
     skin_from_body(obj, body_obj, res.bones, smooth_iters=gdef.get("weight_smooth", 10))
+    if gdef.get("source_group") == "helper-skirt":
+        skirt_weights(obj, res)
+    elif "flare" in gdef:
+        skirt_weights(obj, res, below=res.arm.data.bones["thigh_l"].head_local.z)
     offset_along_normals(obj, gap)
     bvh = body_bvh(body_obj)
     conform(obj, bvh, gap * 0.8)
