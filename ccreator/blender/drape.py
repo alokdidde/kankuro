@@ -102,8 +102,8 @@ def _anchors(res, bvh, waist_z, drop):
     back = lambda x, z: _ray(bvh, (x, 1.0, z), (0, -1, 0))
     pts = [
         _ray(bvh, (-1.0, yc, waist_z), (1, 0, 0)),      # right side of the waist, where it comes round
-        front(-0.07, tz(0.42)),
-        front(0.06, tz(0.70)),
+        front(-0.04, tz(0.36)),
+        front(0.07, tz(0.64)),
         front(sx - 0.02, tz(0.9)),
         _ray(bvh, (sx, yc, 3.0), (0, 0, -1)),          # gathered on top of the left shoulder
         back(sx - 0.02, tz(0.86)),
@@ -111,7 +111,7 @@ def _anchors(res, bvh, waist_z, drop):
         back(0.05, waist_z),
         back(0.04, waist_z - drop),                    # hanging end
     ]
-    widths = [0.14, 0.22, 0.25, 0.14, 0.10, 0.18, 0.26, 0.27, 0.28]
+    widths = [0.18, 0.32, 0.36, 0.16, 0.10, 0.18, 0.26, 0.27, 0.28]
     if any(p is None for p in pts):
         raise RuntimeError("pallu path missed the body")
     return np.array(pts), np.array(widths), 4
