@@ -125,8 +125,16 @@ def add_armature_modifier(obj, arm):
     return mod
 
 
+def deselect_all():
+    # view_layer.objects can hold dangling entries after objects are removed; go through bpy.data
+    vl = bpy.context.view_layer
+    vl.update()
+    for o in bpy.data.objects:
+        if o.name in vl.objects:
+            o.select_set(False)
+
+
 def select_only(obj):
-    for o in bpy.context.view_layer.objects:
-        o.select_set(False)
+    deselect_all()
     obj.select_set(True)
     bpy.context.view_layer.objects.active = obj

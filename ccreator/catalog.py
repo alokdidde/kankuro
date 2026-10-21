@@ -34,8 +34,9 @@ GARMENTS = {
         "regions": {"torso": [0.1, 0.93]},
     },
     "jacket": {
-        "desc": "Loose long-sleeve outer layer covering the hips", "slot": "outer", "layer": 3, "offset": 0.02,
-        "regions": {"torso": [0, 1], "clavicle_*": [0, 1], "upperarm_*": [0, 1], "lowerarm_*": [0, 0.9], "thigh_*": [0, 0.12]},
+        "desc": "Loose long-sleeve outer layer covering the hips", "slot": "outer", "layer": 3, "offset": 0.012,
+        "weight_smooth": 16,
+        "regions": {"torso": [-0.04, 1], "clavicle_*": [0, 1], "upperarm_*": [0, 1], "lowerarm_*": [0, 0.9]},
     },
     "pants": {
         "desc": "Full-length trousers", "slot": "bottom", "layer": 2, "offset": 0.008,

@@ -53,8 +53,8 @@ def select_faces(res, gdef, verts, faces_local):
         torso = np.isin(names, TORSO)
         t[torso] = (co[torso, 2] - z0) / (z1 - z0)
         names = np.where(torso, "torso", names)
-        # A range touching 0 or 1 is open-ended: projections overshoot slightly near joints
-        lim = {n: (-np.inf if a <= 0 else a, np.inf if b >= 1 else b) for n, (a, b) in regions.items()}
+        # A range starting at exactly 0 or ending at exactly 1 is open-ended: projections overshoot slightly near joints
+        lim = {n: (-np.inf if a == 0 else a, np.inf if b == 1 else b) for n, (a, b) in regions.items()}
         inc = np.array([n in lim and lim[n][0] <= ti <= lim[n][1] for n, ti in zip(names, t)])
     else:
         z = co[:, 2]
@@ -181,7 +181,7 @@ def _shape(res, gdef, gid, verts, faces_local, keep):
         # Shoes: smooth away toes, flatten the bottom into a sole
         sm = obj.modifiers.new("smooth", "SMOOTH")
         sm.factor = 1.0
-        sm.iterations = 12
+        sm.iterations = 30
         apply_modifier(obj, sm)
         co = util.get_coords(obj)
         co[:, 2] = np.where(co[:, 2] < 0.012, 0.0, co[:, 2])
@@ -190,6 +190,38 @@ def _shape(res, gdef, gid, verts, faces_local, keep):
 
 
 _UV_CACHE = {}
+
+
+def skin_from_body(obj, body_obj, bones, smooth_iters=10, smooth_factor=0.5):
+    """Skin weights for clothing: copy the weights of the nearest point on the body surface, then
+    smooth them across the garment so it bends in broad, cloth-like folds instead of creasing
+    sharply where body weights change fast (shoulders, hips)."""
+    from mathutils import interpolate
+    BW = util.weight_matrix(body_obj, bones)
+    bme = body_obj.data
+    bco = util.get_coords(body_obj)
+    polys = [list(p.vertices) for p in bme.polygons]
+    bvh = BVHTree.FromPolygons([Vector(c) for c in bco], polys)
+    co = util.get_coords(obj)
+    W = np.zeros((len(co), len(bones)))
+    for i, p in enumerate(co):
+        loc, _, fi, _ = bvh.find_nearest(Vector(p))
+        vs = polys[fi]
+        bary = interpolate.poly_3d_calc([Vector(bco[v]) for v in vs], loc)
+        W[i] = (BW[vs] * np.array(bary)[:, None]).sum(0)
+    # Laplacian smoothing of weights over the garment's own edges
+    me = obj.data
+    e = np.empty(len(me.edges) * 2, dtype=np.int64)
+    me.edges.foreach_get("vertices", e)
+    e = e.reshape(-1, 2)
+    deg = np.bincount(e.ravel(), minlength=len(co)).astype(float)
+    deg[deg == 0] = 1
+    for _ in range(smooth_iters):
+        acc = np.zeros_like(W)
+        np.add.at(acc, e[:, 0], W[e[:, 1]])
+        np.add.at(acc, e[:, 1], W[e[:, 0]])
+        W = (1 - smooth_factor) * W + smooth_factor * acc / deg[:, None]
+    util.set_weight_matrix(obj, W, bones)
 
 
 def make(res, ref_res, body_obj, gid, gtype, layer_rank=0):
@@ -212,7 +244,8 @@ def make(res, ref_res, body_obj, gid, gtype, layer_rank=0):
         bpy.data.objects.remove(ref, do_unlink=True)
     keep, uv, uvinfo = _UV_CACHE[gtype]
     obj = _shape(res, gdef, gid, verts, faces_local, keep)
-    gap = gdef["offset"] + 0.004 * layer_rank
+    gap = gdef["offset"] + 0.003 * layer_rank
+    skin_from_body(obj, body_obj, res.bones, smooth_iters=gdef.get("weight_smooth", 10))
     offset_along_normals(obj, gap)
     conform(obj, body_bvh(body_obj), gap * 0.8)
     if gdef.get("sole"):

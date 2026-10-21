@@ -9,9 +9,13 @@ from mathutils import Matrix, Vector
 
 DATA = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
 
-# Bones whose rest direction is forced to the Mesh2Motion T-pose direction.
-# The spine chain, neck and head keep the body's natural curve.
-FREE_BONES = {"root", "pelvis", "spine_01", "spine_02", "spine_03", "neck_01", "head", "head_leaf"}
+# Bones whose rest direction is forced to the Mesh2Motion T-pose direction are all limb bones except
+# these. The spine chain, neck and head keep the body's natural curve. Clavicles stay put too:
+# Mesh2Motion's clavicle points ~40 degrees backward and up, and rotating the mesh to match it
+# hunches the shoulders. (Every bone still gets Mesh2Motion's exact rest orientation afterwards, in
+# match_m2m_orientation, which changes bone frames only, not the mesh.)
+FREE_BONES = {"root", "pelvis", "spine_01", "spine_02", "spine_03", "neck_01", "head", "head_leaf",
+              "clavicle_l", "clavicle_r"}
 
 
 @lru_cache(maxsize=1)

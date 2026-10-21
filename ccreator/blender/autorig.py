@@ -228,8 +228,7 @@ def _fill_unweighted(obj):
 
 def _heat(obj, arm):
     obj.vertex_groups.clear()
-    for o in bpy.context.view_layer.objects:
-        o.select_set(False)
+    util.deselect_all()
     obj.select_set(True)
     arm.select_set(True)
     bpy.context.view_layer.objects.active = arm

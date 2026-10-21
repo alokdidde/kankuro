@@ -179,6 +179,10 @@ def hide_body(body_obj, covers, max_dist=0.06):
     return len(kill)
 
 
+def layer_of(g):
+    return g.get("layer", catalog.GARMENTS.get(g.get("type"), {}).get("layer", 1))
+
+
 def build_scene(spec, project, work_dir):
     """Build everything in the current Blender scene. Returns a Built."""
     b = Built()
@@ -248,7 +252,7 @@ def build_scene(spec, project, work_dir):
             util.add_armature_modifier(gobj, res.arm)
             keep_mats = not g.get("texture") and not g.get("color") and len(gobj.data.materials) > 0
         else:
-            gobj, info = garments.make(res, reference_body(), body_obj, g["id"], g["type"], rank)
+            gobj, info = garments.make(res, reference_body(), body_obj, g["id"], g["type"], layer_of(g))
             b.uv_info[g["id"]] = info
             keep_mats = False
         if not keep_mats:
