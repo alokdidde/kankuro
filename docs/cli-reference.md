@@ -504,14 +504,17 @@ kankuro autorig <mesh> --out GLB [--facing auto|-y|+y|-x|+x] [--animations A,B] 
 | `--facing` | `auto` | which way the model faces (`-y`, `+y`, `-x`, `+x`); `auto` detects it from the feet |
 | `--animations` | | clips to bake in |
 | `--render` | | folder for check renders (front and side, at rest and posed) |
-| `--method` | `auto` | skinning: `heat` (bone heat), `proximity` (distance), `auto` tries heat first and falls back |
+| `--method` | `auto` | skinning: `heat` (bone heat on the mesh), `proximity` (distance weights), `auto` tries heat, then heat on a welded copy and on voxel remeshes (fine to coarse) with weights copied back, then distance |
 
 What works: upright humanoids in T- or A-pose, dressed or not, realistic or cartoon proportions.
 Legs must be separate below the knees. A long robe that hides the crotch fails with
 `autorig_failed`. Models taller than 20 units are taken as centimetres and scaled to metres.
 
-The output reports the detected `facing`, the skinning method used (`skinning.method`), and every
-joint position, so you can check it. A log is written next to the output as `autorig.log`.
+The output reports the detected `facing_detected`, `scaled_by` (0.01 for centimetre models), the
+skinning method used (`skinning.method`, with `skinning.tried` listing the unweighted fraction of
+each attempt), and `joints`: every bone head in the input file's own coordinates, so you can check
+the fit against the mesh. Blendshapes (shape keys) in the input are kept. A log is written next to
+the output as `autorig.log`.
 
 ```bash
 kankuro autorig robot.glb --out robot_rigged.glb --animations Idle_A,Walk --render ./check
