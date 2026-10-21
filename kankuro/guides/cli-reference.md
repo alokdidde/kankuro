@@ -519,7 +519,7 @@ and body skin under clothing is hidden so it can't poke through. `--layer N` ove
 | `--file` | import | your mesh, modelled on the reference body |
 | `--color` | all | base colour (multiplies the texture if there is one) |
 | `--texture` | all | albedo PNG painted on the garment's UV template; `""` removes it |
-| `--fabric` | all | surface relief preset (`cotton`, `denim`, `knit`, `canvas`, `leather`, `silk`, `spandex`) or `none` |
+| `--fabric` | all | surface relief preset (`cotton` = woven, `jersey` = T-shirt knit, `denim`, `knit`, `canvas`, `leather`, `silk`, `spandex`) or `none` |
 | `--height` | all | greyscale relief PNG on the UV template; white = raised. Added on top of the fabric. `""` removes it |
 | `--normal` | all | tangent-space normal map PNG (OpenGL, green = up) on the template; blended in. `""` removes it |
 | `--normal-strength` | all | scale for the final normal map (default 1.0) |
@@ -534,11 +534,11 @@ Prints `{"garment": {...}, "garments": [...], "replaced"?: [...]}`.
 
 | type | slot | layer | default fabric | description |
 |---|---|---|---|---|
-| `tshirt` | top | 1 | cotton | short-sleeve crew-neck T-shirt |
-| `longsleeve` | top | 1 | cotton | long-sleeve crew-neck top |
-| `tanktop` | top | 1 | cotton | sleeveless tank top |
+| `tshirt` | top | 1 | jersey | short-sleeve crew-neck T-shirt |
+| `longsleeve` | top | 1 | jersey | long-sleeve crew-neck top |
+| `tanktop` | top | 1 | jersey | sleeveless tank top |
 | `blouse` | top | 1 | silk | cropped sari blouse (choli): short sleeves, scoop neck |
-| `kurta` | top | 2 | cotton | knee-length tunic, 3/4 sleeves, flared, side slits |
+| `kurta` | top | 3 | cotton | loose knee-length tunic worn over a dhoti/churidar: band collar, buttoned placket, 3/4 sleeves, side slits |
 | `jacket` | outer | 3 | canvas | loose long-sleeve outer layer covering the hips |
 | `pants` | bottom | 2 | denim | full-length trousers |
 | `shorts` | bottom | 2 | denim | mid-thigh shorts |
@@ -546,7 +546,7 @@ Prints `{"garment": {...}, "garments": [...], "replaced"?: [...]}`.
 | `skirt` | bottom | 2 | cotton | knee-length skirt |
 | `long_skirt` | bottom | 2 | silk | ankle-length skirt |
 | `churidar` | bottom | 0 | cotton | fitted ankle-length trousers gathered over the lower leg |
-| `dhoti` | bottom | 2 | canvas | draped, loose legs from waist to mid-calf |
+| `dhoti` | bottom | 2 | cotton | draped, loose legs to mid-calf, pleated front panel between the legs, rolled waist, back tuck |
 | `saree` | bottom | 3 | silk | Nivi drape: pleated skirt plus pallu over the left shoulder; wear over `blouse` |
 | `dupatta` | shawl | 4 | silk | long scarf across the chest and over both shoulders |
 | `shoes` | feet | 2 | leather | closed shoes with a sole |
@@ -555,6 +555,15 @@ Prints `{"garment": {...}, "garments": [...], "replaced"?: [...]}`.
 | `turban` | head | 4 | canvas | wrapped turban (pagdi); pair with `buzz` hair |
 
 `kankuro catalog garments` always has the current list.
+
+Layers decide stacking whatever order garments are added in: a `kurta` (3) always sits over a `dhoti`
+or `churidar`, a `saree` (3) over its `blouse`. Skirt-like garments (`skirt`, `long_skirt`, `saree`,
+the skirt of a `kurta`) are skinned as one hanging tube, so they don't split like trousers on a stride.
+
+UV templates are unfolded panels (front on the left, back on the right) at one scale in pixels per
+metre, so the sides of the body and the crotch aren't squeezed into slivers. Since 0.3.0 the panels are
+relaxed this way for every garment except the `saree`: re-run `kankuro template <type>` before painting,
+and repaint textures made on an older template.
 
 ```bash
 kankuro garment add tshirt --color "#eeeeee"

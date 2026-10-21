@@ -15,7 +15,7 @@ import traceback
 from . import appearance, catalog, morph, spec as specmod
 from .errors import CliError
 
-VERSION = "0.2.0"
+VERSION = "0.3.0"
 
 
 def emit(obj, code=0):

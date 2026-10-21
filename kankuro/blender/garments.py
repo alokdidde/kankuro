@@ -238,7 +238,7 @@ def offset_along_normals(obj, dist):
     util.set_coords(obj, co)
 
 
-def flat_sketch_uv(obj, margin=0.03):
+def flat_sketch_uv(obj, margin=0.03, unsquash=True):
     """Front faces on the left half, back faces (seen from behind) on the right half, same scale."""
     me = obj.data
     co = util.get_coords(obj)
@@ -274,8 +274,109 @@ def flat_sketch_uv(obj, margin=0.03):
         for li in p.loop_indices:
             v = co[me.loops[li].vertex_index]
             data[li] = (cx + sgn * (v[0] - xc) * s, 0.5 + (v[2] - zc) * s)
+    if unsquash:
+        data, s = _unsquash_uv(me, co, data, is_front, s, margin)
     uv.data.foreach_set("uv", data.ravel())
     return {"scale_px_per_m": s, "front_center_u": 0.25, "back_center_u": 0.75}
+
+
+def _unsquash_uv(me, co, data, is_front, s, margin, iters=300):
+    """Relax a front/back projection towards an as-rigid-as-possible flattening of each panel.
+
+    A straight projection squashes whatever is seen edge-on (the sides of the body and legs, the
+    crotch, the underside of sleeves): the fabric weave baked there comes out stretched into
+    stripes or blurred into fuzzy patches. Each triangle is pulled towards its true shape (rotated
+    to fit), with a weak pull back to the projection so the template still reads as a front and a
+    back view. Each panel is then put back in its half at one common scale (pixels per metre)."""
+    loops_v = np.empty(len(me.loops), dtype=np.int64)
+    me.loops.foreach_get("vertex_index", loops_v)
+    poly_of_loop = np.empty(len(me.loops), dtype=np.int64)
+    for p in me.polygons:
+        poly_of_loop[p.loop_start:p.loop_start + p.loop_total] = p.index
+    side = is_front[poly_of_loop].astype(np.int64)
+    keys, uvid = np.unique(loops_v * 2 + side, return_inverse=True)
+    n = len(keys)
+    U0 = np.zeros((n, 2))
+    np.add.at(U0, uvid, data)
+    U0 /= np.bincount(uvid, minlength=n)[:, None]
+    tris = []
+    for p in me.polygons:
+        li = list(p.loop_indices)
+        tris += [(li[0], li[k], li[k + 1]) for k in range(1, len(li) - 1)]
+    tl = np.array(tris)                       # loop indices
+    tu = uvid[tl]                             # uv vertices
+    P = co[loops_v[tl]] * s                   # 3D corners, in uv units
+    e1, e2 = P[:, 1] - P[:, 0], P[:, 2] - P[:, 0]
+    l1 = np.linalg.norm(e1, axis=1)
+    ok = l1 > 1e-12
+    x = e1 / np.maximum(l1, 1e-12)[:, None]
+    nrm = np.cross(e1, e2)
+    ok &= np.linalg.norm(nrm, axis=1) > 1e-14
+    y = np.cross(nrm, e1)
+    y /= np.maximum(np.linalg.norm(y, axis=1), 1e-12)[:, None]
+    R2 = np.zeros((len(tl), 3, 2))            # rest shape of each triangle, flattened
+    R2[:, 1, 0] = l1
+    R2[:, 2, 0] = np.sum(e2 * x, axis=1)
+    R2[:, 2, 1] = np.sum(e2 * y, axis=1)
+    # the projection mirrors one panel relative to the other: give every triangle of a panel the
+    # handedness most of that panel has (squashed triangles at its sides may be folded over)
+    ar = (U0[tu[:, 1]] - U0[tu[:, 0]])
+    br = (U0[tu[:, 2]] - U0[tu[:, 0]])
+    area = ar[:, 0] * br[:, 1] - ar[:, 1] * br[:, 0]
+    tri_side = side[tl[:, 0]]
+    flip = np.zeros(len(tl), dtype=bool)
+    for f in (0, 1):
+        m = tri_side == f
+        if m.any():
+            flip[m] = np.sum(area[m]) < 0
+    R2[flip, :, 1] *= -1
+    tl, tu, R2 = tl[ok], tu[ok], R2[ok]
+    E = [(0, 1), (1, 2), (2, 0)]
+    deg = np.zeros(n)
+    for a, b in E:
+        deg += np.bincount(tu[:, a], minlength=n) + np.bincount(tu[:, b], minlength=n)
+    deg = np.maximum(deg, 1)
+    U = U0.copy()
+    anchor = 0.02
+    for _ in range(iters):
+        S = np.zeros((len(tu), 2, 2))
+        for a, b in E:
+            e = U[tu[:, b]] - U[tu[:, a]]
+            r = R2[:, b] - R2[:, a]
+            S += e[:, :, None] * r[:, None, :]
+        th = np.arctan2(S[:, 1, 0] - S[:, 0, 1], S[:, 0, 0] + S[:, 1, 1])
+        c, sn = np.cos(th), np.sin(th)
+        acc = np.zeros((n, 2))
+        for a, b in E:
+            r = R2[:, b] - R2[:, a]
+            t = np.stack([c * r[:, 0] - sn * r[:, 1], sn * r[:, 0] + c * r[:, 1]], 1)
+            np.add.at(acc, tu[:, b], U[tu[:, a]] + t)
+            np.add.at(acc, tu[:, a], U[tu[:, b]] - t)
+        U += 0.8 * (acc / deg[:, None] - U) + anchor * (U0 - U)
+    # put each panel back where the projection had it (best rotation + translation), then fit both
+    # halves at one scale
+    uv_side = keys % 2
+    for f in (0, 1):
+        m = uv_side == f
+        if not m.any():
+            continue
+        a, b0 = U[m] - U[m].mean(0), U0[m] - U0[m].mean(0)
+        H = a.T @ b0
+        th = np.arctan2(H[0, 1] - H[1, 0], H[0, 0] + H[1, 1])
+        Rm = np.array([[np.cos(th), -np.sin(th)], [np.sin(th), np.cos(th)]])
+        U[m] = a @ Rm.T + U0[m].mean(0)
+    k = 1.0
+    for f in (0, 1):
+        m = uv_side == f
+        if m.any():
+            ext = np.ptp(U[m], axis=0)
+            k = min(k, (0.5 - 2 * margin) / max(ext[0], 1e-6), (1 - 2 * margin) / max(ext[1], 1e-6))
+    for f, cx in ((1, 0.25), (0, 0.75)):
+        m = uv_side == f
+        if m.any():
+            lo, hi = U[m].min(0), U[m].max(0)
+            U[m] = (U[m] - (lo + hi) / 2) * k + np.array([cx, 0.5])
+    return U[uvid], s * k
 
 
 def _source_faces(gdef):
@@ -387,6 +488,105 @@ def _cut_slits(bm, depth, opening):
                     break
 
 
+def _band_collar(bm, res, c):
+    """A band (mandarin) collar: extrude the neck opening straight up by c["height"], leaning in to
+    stand around the neck. Its vertices are tagged in a "collar" int layer."""
+    tag = bm.verts.layers.int.get("collar") or bm.verts.layers.int.new("collar")  # (invalidates refs: first)
+    neck = res.arm.data.bones["neck_01"].head_local
+    loops = [lp for lp in _boundary_loops(bm) if len(lp) > 8]
+    loop = min(loops, key=lambda lp: np.linalg.norm(np.mean([v.co for v in lp], 0)[:2] - np.array(neck[:2]))
+               + abs(np.mean([v.co.z for v in lp]) - neck.z))
+    lv = set(loop)
+    edges = [e for e in bm.edges if e.is_boundary and e.verts[0] in lv and e.verts[1] in lv]
+    base_z = np.mean([v.co.z for v in loop])
+    for v in loop:  # a level base so the band has a straight lower edge
+        v.co.z = base_z
+    c0 = Vector((neck.x, neck.y, 0))
+    rows = max(2, int(round(c["height"] / 0.01)))
+    for k in range(rows):
+        ret = bmesh.ops.extrude_edge_only(bm, edges=edges)
+        new = [g for g in ret["geom"] if isinstance(g, bmesh.types.BMVert)]
+        for v in new:
+            d = Vector((v.co.x, v.co.y, 0)) - c0
+            v.co = c0 + d * (1 - c.get("lean", 0.12) / rows) + Vector((0, 0, base_z + c["height"] * (k + 1) / rows))
+            v[tag] = 1
+        edges = [g for g in ret["geom"] if isinstance(g, bmesh.types.BMEdge) and all(x in new for x in g.verts)]
+
+
+def _hang_from_chest(obj, res, ease):
+    """Loose tunic body: below the chest the cloth falls straight instead of following the waist in
+    (each direction around the body keeps at least the chest's radius), plus `ease` metres of room.
+    Sleeves are left alone."""
+    co = util.get_coords(obj)
+    bones = res.arm.data.bones
+    z_chest = bones["spine_03"].head_local.z + 0.04
+    yc = bones["spine_02"].head_local.y
+    xs = abs(bones["upperarm_l"].head_local.x) * 0.9
+    body = np.abs(co[:, 0]) < xs
+    d = co[:, :2] - np.array([0.0, yc])
+    r = np.linalg.norm(d, axis=1)
+    th = np.arctan2(d[:, 1], d[:, 0])
+    nb = 72
+    bins = ((th + np.pi) / (2 * np.pi) * nb).astype(int) % nb
+    ring = body & (np.abs(co[:, 2] - z_chest) < 0.03)
+    rc = np.zeros(nb)
+    for i in range(nb):
+        m = ring & (bins == i)
+        rc[i] = r[m].max() if m.any() else 0
+    filled = rc > 0
+    rc = np.interp(np.arange(nb), np.nonzero(filled)[0], rc[filled], period=nb)
+    for _ in range(3):
+        rc = 0.5 * rc + 0.25 * (np.roll(rc, 1) + np.roll(rc, -1))
+    t = np.clip((z_chest - co[:, 2]) / 0.12, 0, 1)
+    t = t * t * (3 - 2 * t)
+    target = np.maximum(r, rc[bins] + ease) * t + r * (1 - t)
+    sel = body & (co[:, 2] < z_chest)
+    co[sel, :2] = (np.array([0.0, yc]) + d / np.maximum(r, 1e-6)[:, None] * target[:, None])[sel]
+    util.set_coords(obj, co)
+
+
+def _level_bottom_hem(obj, res):
+    """Make a tunic's hem (one loop, or front and back pieces between slits) one straight level line:
+    stacking it over trousers lifts parts of it."""
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    z_hip = res.arm.data.bones["thigh_l"].head_local.z
+    hems = []
+    for lp in _boundary_loops(bm):
+        z = np.array([v.co.z for v in lp])
+        if z.mean() < z_hip:
+            hems.append((lp, z))
+    if hems:
+        zt = float(np.median(np.concatenate([z for _, z in hems])))
+        for lp, z in hems:
+            low = [v for v in lp if v.co.z < zt + 0.06]  # the slit edges rise from the hem: leave them
+            _fade_into({v: Vector((0, 0, zt - v.co.z)) for v in low}, low, 4)
+    bm.to_mesh(obj.data)
+    bm.free()
+
+
+def placket_info(obj, uv_layer="UVMap"):
+    """UV position of the front-centre neck point (base of the collar or the neckline), for drawing a
+    button placket down the front."""
+    me = obj.data
+    co = util.get_coords(obj)
+    attr = me.attributes.get("collar")
+    collar = np.zeros(len(co), bool)
+    if attr is not None:
+        a = np.empty(len(co), dtype=np.int32)
+        attr.data.foreach_get("value", a)
+        collar = a > 0
+    cand = np.nonzero((np.abs(co[:, 0]) < 0.012) & (co[:, 1] < 0) & ~collar)[0]
+    if not len(cand):
+        return None
+    vi = cand[np.argmax(co[cand, 2])]
+    uv = me.uv_layers[uv_layer].data
+    for lp in me.loops:
+        if lp.vertex_index == vi:
+            return tuple(uv[lp.index].uv)
+    return None
+
+
 def _gathers(obj, res, g):
     """Churidar gathers: rings of soft bunched folds over the lower leg (wavy, outward only)."""
     heads = {b.name: b.head_local for b in res.arm.data.bones}
@@ -433,6 +633,8 @@ def _shape(res, gdef, gid, verts, faces_local, keep):
         _level_hems(bm, heads["pelvis"].z, heads["neck_01"].z)
     if gdef.get("flare", {}).get("slits"):
         _cut_slits(bm, gdef["flare"]["slits"], 0.012)
+    if gdef.get("collar"):
+        _band_collar(bm, res, gdef["collar"])
     bm.to_mesh(obj.data)
     bm.free()
     if gdef.get("sole"):
@@ -607,7 +809,12 @@ def make(res, ref_res, body_obj, gid, gtype, layer_rank=0, worn=None):
         if "flare" in gdef:
             keep = [i for i in keep if part[i] == 0] + select_flare(ref_res, gdef, verts, faces_local, part)
         ref = _shape(ref_res, gdef, "_ref_" + gid, verts, faces_local, keep)
-        uvinfo = flat_sketch_uv(ref)
+        # lay the UVs out on the cloth as it hangs, not on the body under it
+        if gdef.get("loose"):
+            loosen_legs(ref, ref_res, gdef["loose"])
+        if gdef.get("hang"):
+            _hang_from_chest(ref, ref_res, gdef["hang"])
+        uvinfo = flat_sketch_uv(ref, unsquash=gdef.get("unsquash_uv", True))
         uv = np.empty(len(ref.data.loops) * 2)
         ref.data.uv_layers["UVMap"].data.foreach_get("uv", uv)
         if gdef.get("drape") == "saree":
@@ -629,6 +836,14 @@ def make(res, ref_res, body_obj, gid, gtype, layer_rank=0, worn=None):
     conform(obj, bvh, gap * 0.8)
     if gdef.get("loose"):
         loosen_legs(obj, res, gdef["loose"])
+    if gdef.get("hang"):
+        _hang_from_chest(obj, res, gdef["hang"])
+    if gdef.get("waist_roll") or gdef.get("tuck"):
+        from . import dhoti
+        if gdef.get("tuck"):
+            dhoti.back_tuck(obj, res, **gdef["tuck"])
+        if gdef.get("waist_roll"):
+            dhoti.waist_roll(obj, **gdef["waist_roll"])
     if worn is not None:
         conform_over(obj, bvh, worn, 0.006)
     if "gathers" in gdef:
@@ -637,13 +852,25 @@ def make(res, ref_res, body_obj, gid, gtype, layer_rank=0, worn=None):
         co = util.get_coords(obj)
         co[:, 2] = np.maximum(co[:, 2], 0.0)
         util.set_coords(obj, co)
+    if "flare" in gdef:
+        _level_bottom_hem(obj, res)
     layer = obj.data.uv_layers.get("UVMap") or obj.data.uv_layers.new(name="UVMap")
     layer.data.foreach_set("uv", uv)
+    if gdef.get("placket"):
+        at = placket_info(obj)
+        if at is not None:
+            uvinfo = dict(uvinfo, placket=dict(gdef["placket"], u=at[0], v=at[1]))
     if gdef.get("drape") == "saree":
         from . import drape
         pallu = drape.pallu(res, body_obj, obj, worn, gdef, uvinfo)
         with bpy.context.temp_override(active_object=obj, selected_editable_objects=[obj, pallu], object=obj):
             bpy.ops.object.join()
+    if gdef.get("pleat_panel"):
+        from . import dhoti
+        panel = dhoti.front_pleats(res, body_obj, obj, gdef["pleat_panel"])
+        with bpy.context.temp_override(active_object=obj, selected_editable_objects=[obj, panel], object=obj):
+            bpy.ops.object.join()
+    obj["shell_faces"] = len(obj.data.polygons)  # solidify appends the inner shell and rims after these
     sol = obj.modifiers.new("thickness", "SOLIDIFY")
     sol.thickness = 0.0015
     sol.offset = 1.0
@@ -661,8 +888,33 @@ def uv_polygons(obj, outer_only=True):
     """UV polygons of a garment (outer shell only: solidify duplicates faces after the originals)."""
     me = obj.data
     uv = me.uv_layers["UVMap"].data
-    n = len(me.polygons)
+    n = obj.get("shell_faces", len(me.polygons)) if outer_only else len(me.polygons)
     polys = []
-    for p in me.polygons:
+    for p in me.polygons[:n]:
         polys.append([tuple(uv[li].uv) for li in p.loop_indices])
     return polys
+
+
+def seam_segments(obj):
+    """UV segments of the sewn seams (edges where the front and back panels meet), on both sides.
+    Hems are left out: they're open boundaries, not seams."""
+    me = obj.data
+    n = obj.get("shell_faces", len(me.polygons))
+    uv = me.uv_layers["UVMap"].data
+    seen = {}
+    segs = []
+    for p in me.polygons[:n]:
+        li = list(p.loop_indices)
+        for a, b in zip(li, li[1:] + li[:1]):
+            va, vb = me.loops[a].vertex_index, me.loops[b].vertex_index
+            key = (min(va, vb), max(va, vb))
+            ua, ub = tuple(uv[a].uv), tuple(uv[b].uv)
+            if va > vb:
+                ua, ub = ub, ua
+            if key in seen:
+                oa, ob = seen.pop(key)
+                if np.hypot(*np.subtract(oa, ua)) > 1e-5 or np.hypot(*np.subtract(ob, ub)) > 1e-5:
+                    segs += [(oa, ob), (ua, ub)]
+            else:
+                seen[key] = (ua, ub)
+    return segs

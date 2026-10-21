@@ -60,20 +60,26 @@ HAIR_STYLES = {
 #          `drop` = low point of the front U from mid-back (0) to the neck (1), `end` = hanging ends
 #          from the hip joint (0) to the knee (1))
 #   a_line: a skirt flares out by this many metres at the hem, leaving room for the legs on a stride
+#   hang: a loose tunic falls straight down from the chest with this much ease (m) instead of following the waist
+#   collar: band collar standing up from the neckline (height, lean in towards the neck)
+#   placket: buttoned front opening drawn into the fabric relief (length, width in m, button count)
+#   pleat_panel: dhoti front pleats, a strip hanging from the front of the waist between the legs (x range, fold
+#          count/depth, flare at the hem, hem_up = how far its hem is above the legs' hem)
+#   waist_roll / tuck: a rolled waistband (height, bulge) / the kachha gathered in at the centre back
 #   gathers: bunched rings of cloth over the lower leg, from `from` (0 = knee, 1 = ankle)
 GARMENTS = {
     "tshirt": {
-        "fabric": "cotton", "desc": "Short-sleeve crew-neck T-shirt", "slot": "top", "layer": 1, "offset": 0.006,
+        "fabric": "jersey", "desc": "Short-sleeve crew-neck T-shirt", "slot": "top", "layer": 1, "offset": 0.006,
         "regions": {"torso": [0.1, 1], "clavicle_*": [0, 1], "upperarm_*": [0, 0.45]},
         "neckline": {"radius": 0.085, "front": 0.11, "back": 0.04},
     },
     "longsleeve": {
-        "fabric": "cotton", "desc": "Long-sleeve crew-neck top", "slot": "top", "layer": 1, "offset": 0.006,
+        "fabric": "jersey", "desc": "Long-sleeve crew-neck top", "slot": "top", "layer": 1, "offset": 0.006,
         "regions": {"torso": [0.1, 1], "clavicle_*": [0, 1], "upperarm_*": [0, 1], "lowerarm_*": [0, 0.92]},
         "neckline": {"radius": 0.085, "front": 0.11, "back": 0.04},
     },
     "tanktop": {
-        "fabric": "cotton", "desc": "Sleeveless tank top", "slot": "top", "layer": 1, "offset": 0.005,
+        "fabric": "jersey", "desc": "Sleeveless tank top", "slot": "top", "layer": 1, "offset": 0.005,
         "regions": {"torso": [0.1, 0.93]},
     },
     "jacket": {
@@ -115,6 +121,9 @@ GARMENTS = {
         # hem: height above the floor; pleats: front panel x range, fold count/depth, flare at the hem;
         # pallu: how far its end hangs below the waist at the back, gap over what it lies on
         "drape": "saree", "subdiv": 2, "hem": 0.025, "weight_smooth": 30, "a_line": 0.05,
+        # the saree's skirt is a smooth tube that projects cleanly; its template layout (hem border, pallu
+        # band) is what saree textures are painted against, so it keeps the plain projection
+        "unsquash_uv": False,
         "pleats": {"x": [-0.075, 0.085], "folds": 7, "depth": 0.014, "flare": 0.03},
         "pallu": {"drop": 0.45, "gap": 0.007},
     },
@@ -132,8 +141,11 @@ GARMENTS = {
                     "middle_*": [0, 1], "ring_*": [0, 1], "pinky_*": [0, 1]},
     },
     "dhoti": {
-        "fabric": "canvas", "desc": "Draped dhoti: loose woven-cotton legs from the waist to mid-calf",
+        "fabric": "cotton", "desc": "Draped dhoti: loose woven-cotton legs from the waist to mid-calf, a pleated "
+                                    "front panel hanging between the legs, rolled waist, kachha tuck at the back",
         "slot": "bottom", "layer": 2, "offset": 0.008, "loose": 0.06,
+        "pleat_panel": {"x": [-0.075, 0.075], "folds": 6, "depth": 0.009, "flare": 0.03, "hem_up": 0.04},
+        "waist_roll": {"height": 0.045, "bulge": 0.007}, "tuck": {"depth": 0.025, "width": 0.06, "length": 0.3},
         "regions": {"torso": [0, 0.17], "thigh_*": [0, 1], "calf_*": [0, 0.7]},
     },
     "turban": {
@@ -145,11 +157,14 @@ GARMENTS = {
                    "depth": 0.009},
     },
     "kurta": {
-        "fabric": "cotton", "desc": "Knee-length tunic with 3/4 sleeves, fitted to the waist then flared, side slits",
-        "slot": "top", "layer": 2, "offset": 0.006, "weight_smooth": 16,
+        "fabric": "cotton", "desc": "Loose knee-length tunic worn over a dhoti or churidar: band collar, buttoned "
+                                    "front placket, 3/4 sleeves, side slits from the hip down",
+        "slot": "top", "layer": 3, "offset": 0.008, "weight_smooth": 16, "hang": 0.025,
         "regions": {"torso": [0.1, 1], "clavicle_*": [0, 1], "upperarm_*": [0, 1], "lowerarm_*": [0, 0.6]},
-        "neckline": {"radius": 0.085, "front": 0.12, "back": 0.04},
-        "flare": {"hem": 1.12, "slits": 0.2},
+        "neckline": {"radius": 0.075, "front": 0.075, "back": 0.035},
+        "collar": {"height": 0.03, "lean": 0.12},
+        "placket": {"length": 0.17, "width": 0.032, "buttons": 3},
+        "flare": {"hem": 1.12, "slits": 0.36},
     },
     "churidar": {
         "fabric": "cotton", "desc": "Fitted ankle-length trousers bunched into gathers over the lower leg",

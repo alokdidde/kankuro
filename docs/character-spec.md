@@ -124,7 +124,7 @@ with a `source`.
 | `source` | path | imported mesh (only for `custom`) |
 | `color` | hex | base colour (multiplies the texture) |
 | `texture` | path | albedo on the garment's UV template |
-| `fabric` | string | relief preset (`cotton`, `denim`, `knit`, `canvas`, `leather`, `silk`, `spandex`) or `none`; missing = the type's default |
+| `fabric` | string | relief preset (`cotton` woven, `jersey`, `denim`, `knit`, `canvas`, `leather`, `silk`, `spandex`) or `none`; missing = the type's default |
 | `height` | path | greyscale relief on the template, white = raised |
 | `normal` | path | tangent-space normal map on the template (OpenGL, green up) |
 | `normal_strength` | number | scales the final normal map |

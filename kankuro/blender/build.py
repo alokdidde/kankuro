@@ -309,10 +309,11 @@ def _garment_materials(items, project, work_dir, spec, b):
             gobj.data.materials.append(materials.make(f"Garment_{g['id']}", color=color, image_path=tex,
                                                       roughness=g.get("roughness", 0.8), double_sided=True))
             continue
-        mask, uv_per_m = None, 0.45
+        mask, uv_per_m, seams = None, 0.45, None
         if g["id"] in b.uv_info:
             mask = fabric.mask_from_polys(garments.uv_polygons(gobj), size)
             uv_per_m = b.uv_info[g["id"]]["scale_px_per_m"]
+            seams = garments.seam_segments(gobj)
         hangs = gdef.get("source_group") == "helper-skirt" or any(k in gdef for k in ("drape", "loose", "flare"))
         ao, chain_s, crease_w, detail = clothshade.bake_maps(gobj, b.arm, b.body, b.meshes, b.res.bones, size,
                                                              leg_creases=not hangs)
@@ -320,7 +321,7 @@ def _garment_materials(items, project, work_dir, spec, b):
                   height_path=os.path.join(project, g["height"]) if g.get("height") else None,
                   normal_path=os.path.join(project, g["normal"]) if g.get("normal") else None,
                   strength=float(g.get("normal_strength", 1.0)), ao=ao, chain_s=chain_s, crease_w=crease_w,
-                  detail=detail)
+                  detail=detail, seams=seams, placket_spec=(b.uv_info.get(g["id"]) or {}).get("placket"))
         jobs.append((g, gobj, os.path.join(work_dir, f"garment_{g['id']}"), uv_per_m, kw))
     with ThreadPoolExecutor(max_workers=min(4, max(1, len(jobs)))) as ex:
         results = list(ex.map(lambda j: fabric.bake(j[2], size, j[3], **j[4]), jobs))

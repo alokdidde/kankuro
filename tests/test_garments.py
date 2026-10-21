@@ -113,5 +113,87 @@ class SkirtInMotion(unittest.TestCase):
             self.assertLess(W[front, bn.index(leg)].max(), 1e-6, leg)
 
 
+def _uv_area_ratios(obj, scale):
+    """Per-face UV area / (3D area x scale^2) over a garment's outer shell (1 = no squash)."""
+    from kankuro.blender import util
+    me = obj.data
+    co = util.get_coords(obj)
+    uv = me.uv_layers["UVMap"].data
+    n = obj.get("shell_faces", len(me.polygons))
+    out = []
+    for p in me.polygons[:n]:
+        li = list(p.loop_indices)
+        P = co[[me.loops[k].vertex_index for k in li]]
+        U = np.array([uv[k].uv for k in li])
+        a3 = sum(0.5 * np.linalg.norm(np.cross(P[k] - P[0], P[k + 1] - P[0])) for k in range(1, len(li) - 1))
+        a2 = sum(0.5 * abs((U[k] - U[0])[0] * (U[k + 1] - U[0])[1] - (U[k] - U[0])[1] * (U[k + 1] - U[0])[0])
+                 for k in range(1, len(li) - 1))
+        out.append(a2 / max(a3 * scale * scale, 1e-12))
+    return np.array(out)
+
+
+class TraditionalDress(unittest.TestCase):
+    """#4 dhoti and #5 kurta, built the way the issue's farmer was (kurta added first)."""
+
+    @classmethod
+    def setUpClass(cls):
+        p = os.path.join(tempfile.mkdtemp(), "farmer")
+        cc("init", p, "--preset", "male")
+        cc("garment", "add", "kurta", "--color", "#e8e0cf", "--fabric", "cotton", project=p)
+        cc("garment", "add", "dhoti", "--color", "#f1ece0", "--fabric", "cotton", project=p)
+        cls.b = _build(p)
+        cls.g = {m.get("garment_id"): m for m in cls.b.meshes if m.get("garment_id")}
+
+    def test_cotton_is_woven_and_tshirts_are_jersey(self):
+        from kankuro import catalog, fabric
+        self.assertEqual(fabric.FABRICS["cotton"]["kind"], "plain")
+        self.assertEqual(fabric.FABRICS["jersey"]["kind"], "jersey")
+        self.assertEqual(catalog.GARMENTS["tshirt"]["fabric"], "jersey")
+        self.assertEqual(catalog.GARMENTS["dhoti"]["fabric"], "cotton")
+
+    def test_uvs_are_not_squashed(self):
+        """The fuzzy/ribbed patches came from faces squeezed to slivers in the UV layout."""
+        from kankuro.blender import dhoti
+        for gid in ("dhoti", "kurta"):
+            r = _uv_area_ratios(self.g[gid], self.b.uv_info[gid]["scale_px_per_m"])
+            if gid == "dhoti":  # the pleat panel (joined last) reuses the folded cloth's UVs
+                r = r[:-(dhoti.ROWS - 1) * (dhoti.COLS - 1)]
+            self.assertGreater(np.percentile(r, 2), 0.2, gid)
+
+    def test_kurta_is_over_the_dhoti_and_knee_length(self):
+        from kankuro.blender import garments, util
+        from mathutils import Vector
+        bones = self.b.arm.data.bones
+        z_hip, z_knee = bones["thigh_l"].head_local.z, bones["calf_l"].head_local.z
+        kurta = util.get_coords(self.g["kurta"])
+        self.assertLess(kurta[:, 2].min(), z_knee + 0.02)  # falls to about the knee
+        kb = garments.mesh_bvh([self.g["kurta"]])
+        d = util.get_coords(self.g["dhoti"])
+        hem = kurta[:, 2].min()
+        sel = d[(d[:, 2] > hem + 0.06) & (d[:, 2] < z_hip)]
+        covered = 0
+        for p in sel:  # look outwards (away from the body axis) from each dhoti point
+            out = Vector((p[0], p[1] - bones["pelvis"].head_local.y, 0)).normalized()
+            covered += kb.ray_cast(Vector(p) + out * 0.0005, out, 0.3)[0] is not None
+        self.assertGreater(covered / len(sel), 0.97)
+
+    def test_kurta_collar_and_placket(self):
+        me = self.g["kurta"].data
+        a = np.empty(len(me.vertices), dtype=np.int32)
+        me.attributes["collar"].data.foreach_get("value", a)
+        self.assertGreater(a.sum(), 20)
+        pk = self.b.uv_info["kurta"]["placket"]
+        self.assertTrue(0 < pk["u"] < 0.5 and 0 < pk["v"] < 1)  # front half of the template
+
+    def test_dhoti_has_front_pleats(self):
+        from kankuro.blender import util
+        d = util.get_coords(self.g["dhoti"])
+        bones = self.b.arm.data.bones
+        z_knee = bones["calf_l"].head_local.z
+        # cloth in front of the gap between the knees (the pleated panel), not two separate legs
+        front_gap = (np.abs(d[:, 0]) < 0.02) & (np.abs(d[:, 2] - z_knee) < 0.05) & (d[:, 1] < bones["calf_l"].head_local.y)
+        self.assertGreater(front_gap.sum(), 4)
+
+
 if __name__ == "__main__":
     unittest.main()

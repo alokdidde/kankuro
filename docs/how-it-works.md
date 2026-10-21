@@ -40,7 +40,7 @@ Wear it over `blouse`. `tools/saree_texture.py MASK OUT` paints a simple silk sa
 without an image model (`examples/saree_silk.png`).
 
 Every garment also gets **fabric relief** baked into a normal map, so clothes don't look flat even
-with a plain colour. Each garment type has a default fabric (`catalog fabrics`: cotton, denim, knit,
+with a plain colour. Each garment type has a default fabric (`catalog fabrics`: cotton, jersey, denim, knit,
 canvas, leather, silk, spandex), and `--fabric NAME|none` overrides it. The relief combines the weave,
 hem and seam stitching along the outline, soft folds, and compression creases at the elbows, wrists,
 knees, ankles and waist (only where the cloth sits close to the body, so skirts and drapes stay smooth).
