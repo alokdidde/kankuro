@@ -66,7 +66,12 @@ without an image model (`examples/saree_silk.png`).
 Every garment also gets **fabric relief** baked into a normal map, so clothes don't look flat even
 with a plain colour. Each garment type has a default fabric (`catalog fabrics`: cotton, denim, knit,
 canvas, leather, silk, spandex), and `--fabric NAME|none` overrides it. The relief combines the weave,
-hem and seam stitching along the outline, and soft folds. A supplied `--height` map is added on top,
+hem and seam stitching along the outline, soft folds, and compression creases at the elbows, wrists,
+knees, ankles and waist (only where the cloth sits close to the body, so skirts and drapes stay smooth).
+The albedo gets the look of real cloth rather than plastic: dye mottling, fibre heathering (white weft
+on denim) and ambient occlusion baked from the dressed character (collars, armpits, layer overlaps).
+Materials use cloth **sheen** with a low specular level (exported as `KHR_materials_sheen` /
+`KHR_materials_specular`), which gives the soft, quasi-realistic look of game characters. A supplied `--height` map is added on top,
 and a supplied `--normal` map (OpenGL / +Y green) is blended in. `--normal-strength` scales the result.
 The maps are written to `build/work/garment_<id>_albedo.jpg` and `_normal.jpg` and exported as glTF `baseColorTexture`
 and `normalTexture`. `export.texture_size` (default 2048) sets their resolution.

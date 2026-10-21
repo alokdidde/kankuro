@@ -17,7 +17,8 @@ def srgb_to_linear(c):
 
 
 def make(name, color=None, image_path=None, roughness=0.6, metallic=0.0, double_sided=False,
-         normal_path=None, normal_strength=1.0, subsurface=0.0, specular=None):
+         normal_path=None, normal_strength=1.0, subsurface=0.0, specular=None, sheen=0.0, sheen_roughness=0.5,
+         sheen_tint=(1.0, 1.0, 1.0)):
     mat = bpy.data.materials.new(name)
     nt = mat.node_tree
     bsdf = nt.nodes.get("Principled BSDF")
@@ -39,6 +40,11 @@ def make(name, color=None, image_path=None, roughness=0.6, metallic=0.0, double_
         bsdf.inputs["Subsurface Scale"].default_value = 0.006
     if specular is not None:
         bsdf.inputs["Specular IOR Level"].default_value = specular
+    if sheen:
+        # cloth: soft rim brightening from fibres instead of a sharp highlight (exports as KHR_materials_sheen)
+        bsdf.inputs["Sheen Weight"].default_value = sheen
+        bsdf.inputs["Sheen Roughness"].default_value = sheen_roughness
+        bsdf.inputs["Sheen Tint"].default_value = (*srgb_to_linear(sheen_tint), 1)
     if image_path:
         img = bpy.data.images.load(os.path.abspath(image_path))
         tex = nt.nodes.new("ShaderNodeTexImage")

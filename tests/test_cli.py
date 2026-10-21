@@ -91,7 +91,9 @@ class BuildCommands(unittest.TestCase):
         bad = cc("garment", "set", "skirt", "--fabric", "velvet", project=self.p, ok=False)
         self.assertEqual(bad["error"]["code"], "unknown_fabric")
         out = cc("build", project=self.p)
-        mats = {m["name"]: m for m in glb_json(out["glb"])["materials"]}
+        gl = glb_json(out["glb"])
+        mats = {m["name"]: m for m in gl["materials"]}
+        self.assertIn("KHR_materials_sheen", gl.get("extensionsUsed", []))  # cloth sheen, not plastic gloss
         self.assertIn("normalTexture", mats["Garment_skirt"])
         self.assertIn("normalTexture", mats["Garment_tanktop"])  # default fabric preset
 

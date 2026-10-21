@@ -11,23 +11,32 @@ from PIL import Image
 
 from .blender_free import hex_rgb
 
-# period_mm: weave/knit repeat; amp: relative depth; rough: glTF roughness; fold: low-frequency
-# wrinkle amount; stitch: draw hem/seam stitching
+# period_mm: weave/knit repeat; amp: relative depth; rough: glTF roughness; fold: random soft wrinkle
+# amount; stitch: draw hem/seam stitching; sheen/sheen_rough/spec: Principled sheen + specular level
+# (cloth scatters light at grazing angles instead of a plastic-like specular highlight); crease: strength
+# of compression wrinkles at elbows/knees/waist; heather: fibre colour variation; weft: denim white weft
 FABRICS = {
-    "cotton": {"desc": "Jersey knit T-shirt cotton", "kind": "jersey", "period_mm": 3.5, "amp": 0.5, "rough": 0.85,
-               "fold": 0.35, "stitch": True},
-    "denim": {"desc": "Twill denim with diagonal weave", "kind": "twill", "period_mm": 5.0, "amp": 0.8, "rough": 0.8,
-              "fold": 0.45, "stitch": True},
-    "knit": {"desc": "Chunky knitted wool rib", "kind": "rib", "period_mm": 9.0, "amp": 1.0, "rough": 0.95,
-             "fold": 0.3, "stitch": False},
+    "cotton": {"desc": "Jersey knit T-shirt cotton", "kind": "jersey", "period_mm": 3.5, "amp": 0.5, "rough": 0.92,
+               "fold": 0.35, "stitch": True, "sheen": 0.6, "sheen_rough": 0.5, "spec": 0.25, "crease": 1.0,
+               "heather": 0.06},
+    "denim": {"desc": "Twill denim with diagonal weave", "kind": "twill", "period_mm": 5.0, "amp": 0.8, "rough": 0.9,
+              "fold": 0.45, "stitch": True, "sheen": 0.3, "sheen_rough": 0.6, "spec": 0.25, "crease": 1.2,
+              "heather": 0.05, "weft": 0.22},
+    "knit": {"desc": "Chunky knitted wool rib", "kind": "rib", "period_mm": 9.0, "amp": 1.0, "rough": 0.96,
+             "fold": 0.3, "stitch": False, "sheen": 0.9, "sheen_rough": 0.7, "spec": 0.2, "crease": 0.6,
+             "heather": 0.08},
     "canvas": {"desc": "Plain-weave canvas / jacket cloth", "kind": "plain", "period_mm": 4.0, "amp": 0.6,
-               "rough": 0.8, "fold": 0.5, "stitch": True},
-    "leather": {"desc": "Grained leather", "kind": "grain", "period_mm": 2.5, "amp": 0.55, "rough": 0.5,
-                "fold": 0.25, "stitch": True},
-    "silk": {"desc": "Smooth satin/silk", "kind": "smooth", "period_mm": 0, "amp": 0.0, "rough": 0.35,
-             "fold": 0.5, "stitch": True},
+               "rough": 0.9, "fold": 0.5, "stitch": True, "sheen": 0.4, "sheen_rough": 0.5, "spec": 0.25,
+               "crease": 1.1, "heather": 0.06},
+    "leather": {"desc": "Grained leather", "kind": "grain", "period_mm": 2.5, "amp": 0.55, "rough": 0.58,
+                "fold": 0.25, "stitch": True, "sheen": 0.0, "sheen_rough": 0.5, "spec": 0.45, "crease": 0.8,
+                "heather": 0.05},
+    "silk": {"desc": "Smooth satin/silk", "kind": "smooth", "period_mm": 0, "amp": 0.0, "rough": 0.5,
+             "fold": 0.3, "stitch": True, "sheen": 1.0, "sheen_rough": 0.3, "spec": 0.35, "crease": 0.8,
+             "heather": 0.02},
     "spandex": {"desc": "Smooth stretch fabric (leggings, sportswear)", "kind": "jersey", "period_mm": 1.8,
-                "amp": 0.25, "rough": 0.6, "fold": 0.1, "stitch": True},
+                "amp": 0.25, "rough": 0.65, "fold": 0.1, "stitch": True, "sheen": 0.35, "sheen_rough": 0.4,
+                "spec": 0.35, "crease": 0.3, "heather": 0.03},
 }
 
 
@@ -124,7 +133,8 @@ def folds(size, px_per_mm, rng, amount):
     b = _noise((size, size), 30 * px_per_mm, rng)
     gate = np.clip(_noise((size, size), 60 * px_per_mm, rng) * 0.6 + 0.5, 0, 1)  # folds come and go
     ridge = 1 - np.abs(0.7 * a + 0.3 * b)
-    return 0.6 * amount * (ridge - ridge.mean()) * gate
+    # height in pixel units so the slope (what the normal map shows) is independent of resolution
+    return 0.04 * amount * 22 * px_per_mm * (ridge - ridge.mean()) * gate
 
 
 def normal_from_height(h, strength):
@@ -149,18 +159,113 @@ def _load(path, size, mode):
     return np.asarray(im).astype(np.float32) / 255.0
 
 
+def raster_attr(tri_uv, tri_val, size, max_channels=(), bleed=24):
+    """Rasterise per-corner values of UV triangles into a (size, size, C) map with barycentric interpolation.
+
+    tri_uv: (T, 3, 2) UVs, tri_val: (T, 3, C). Channels in max_channels keep the largest value where
+    triangles overlap (e.g. the outer and inner shell of a solidified garment); others keep the last.
+    Returns (map, covered)."""
+    tri_uv = np.asarray(tri_uv, np.float64)
+    tri_val = np.asarray(tri_val, np.float32)
+    C = tri_val.shape[2]
+    mx = np.zeros(C, bool)
+    mx[list(max_channels)] = True
+    out = np.zeros((size, size, C), np.float32)
+    out[..., mx] = -np.inf
+    cov = np.zeros((size, size), bool)
+    P = np.empty_like(tri_uv)
+    P[..., 0] = tri_uv[..., 0] * size - 0.5
+    P[..., 1] = (1 - tri_uv[..., 1]) * size - 0.5
+    lo = np.clip(np.floor(P.min(1)).astype(int), 0, size - 1)
+    hi = np.clip(np.ceil(P.max(1)).astype(int), 0, size - 1)
+    a, b, c = P[:, 0], P[:, 1], P[:, 2]
+    den = (b[:, 1] - c[:, 1]) * (a[:, 0] - c[:, 0]) + (c[:, 0] - b[:, 0]) * (a[:, 1] - c[:, 1])
+    for t in np.nonzero(np.abs(den) > 1e-12)[0]:
+        (x0, y0), (x1, y1) = lo[t], hi[t]
+        xs = np.arange(x0, x1 + 1)[None, :] - c[t, 0]
+        ys = np.arange(y0, y1 + 1)[:, None] - c[t, 1]
+        l1 = ((b[t, 1] - c[t, 1]) * xs + (c[t, 0] - b[t, 0]) * ys) / den[t]
+        l2 = ((c[t, 1] - a[t, 1]) * xs + (a[t, 0] - c[t, 0]) * ys) / den[t]
+        l3 = 1 - l1 - l2
+        inside = (l1 >= -1e-3) & (l2 >= -1e-3) & (l3 >= -1e-3)
+        if not inside.any():
+            continue
+        yy, xx = np.nonzero(inside)
+        v = (l1[yy, xx, None] * tri_val[t, 0] + l2[yy, xx, None] * tri_val[t, 1]
+             + l3[yy, xx, None] * tri_val[t, 2])
+        yy, xx = yy + y0, xx + x0
+        old = out[yy, xx]
+        out[yy, xx] = np.where(mx, np.maximum(old, v), v)
+        cov[yy, xx] = True
+    out[~cov] = 0
+    return (_dilate(out, cov, bleed) if bleed else out), cov
+
+
+def blur(img, r, passes=2):
+    for _ in range(passes):
+        img = _box(_box(img, r, 0), r, 1)
+    return img
+
+
+def upscale(img, size):
+    """Bicubic resize of a float (h, w) map."""
+    if img.shape[0] == size:
+        return img
+    return np.asarray(Image.fromarray(img.astype(np.float32), mode="F").resize((size, size), Image.BICUBIC))
+
+
+def _dilate(img, cov, iters):
+    """Bleed covered pixels outward so texture filtering at UV seams doesn't pick up the background."""
+    img, cov = img.copy(), cov.copy()
+    for _ in range(iters):
+        acc = np.zeros_like(img)
+        cnt = np.zeros(cov.shape, np.float32)
+        for dy, dx in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            c = np.roll(cov, (dy, dx), (0, 1))
+            acc += np.roll(img, (dy, dx), (0, 1)) * c[..., None]
+            cnt += c
+        new = ~cov & (cnt > 0)
+        img[new] = acc[new] / cnt[new][:, None]
+        cov |= new
+    return img
+
+
+def creases(chain_s, weight, size, px_per_mm, rng, amount):
+    """Compression wrinkles: rings around the limb (constant chain distance s) where `weight` is high,
+    bent and broken up by noise so they read as cloth bunching rather than regular corrugation."""
+    if amount <= 0:
+        return np.zeros((size, size), np.float32)
+    lam_mm = 32.0
+    warp = 2.2 * _noise((size, size), 30 * px_per_mm, rng) + 0.4 * _noise((size, size), 9 * px_per_mm, rng)
+    phase = 2 * np.pi * chain_s * 1000.0 / lam_mm + warp
+    p = 2 * np.abs(np.sin(phase * 0.5)) - 1  # sharp valleys (the crease), rounded ridges
+    gate = np.clip(0.55 + 0.7 * _noise((size, size), 22 * px_per_mm, rng), 0, 1)
+    lam_px = lam_mm * px_per_mm
+    return amount * 0.035 * lam_px * weight * gate * p
+
+
 def bake(out_prefix, size, uv_per_m, mask=None, color="#8a8f99", albedo_path=None, fabric="cotton",
-         height_path=None, normal_path=None, strength=1.0, seed=1):
-    """Write <prefix>_albedo.jpg and <prefix>_normal.jpg (JPEG keeps the GLB small). Returns (albedo, normal, roughness)."""
+         height_path=None, normal_path=None, strength=1.0, seed=1, ao=None, chain_s=None, crease_w=None, detail=None):
+    """Write <prefix>_albedo.jpg and <prefix>_normal.jpg (JPEG keeps the GLB small).
+
+    ao: (size, size) ambient occlusion baked from the dressed character (1 = open), multiplied into the
+    albedo so folds, collars and layer overlaps keep their depth in viewers without AO.
+    chain_s/crease_w: maps from clothshade for compression wrinkles at joints.
+    detail: 0..1 map fading procedural detail where the UVs are squeezed (it would smear into streaks).
+    Returns (albedo, normal, material) where material holds roughness/sheen/specular for the shader."""
     rng = np.random.default_rng(seed)
     px_per_mm = size * uv_per_m / 1000.0
     f = FABRICS.get(fabric) if fabric and fabric != "none" else None
     h = np.zeros((size, size), np.float32)
+    keep = np.ones((size, size), np.float32) if detail is None else detail.astype(np.float32)
     if f:
         h += f["amp"] * weave(f["kind"], size, px_per_mm, f["period_mm"], rng)
         h += folds(size, px_per_mm, rng, f["fold"])
         if f["stitch"] and mask is not None:
             h += stitching(mask, px_per_mm)
+        if chain_s is not None and crease_w is not None:
+            h += creases(chain_s, crease_w, size, px_per_mm, rng, f["crease"])
+        h *= keep
     if height_path:
         h += 3.0 * _load(height_path, size, "L")
     # normal strength in "height units per pixel": scale so 1 mm of relief reads clearly
@@ -173,16 +278,34 @@ def bake(out_prefix, size, uv_per_m, mask=None, color="#8a8f99", albedo_path=Non
         alb = _load(albedo_path, size, "RGB")
     else:
         alb = np.ones((size, size, 3), np.float32) * np.array(hex_rgb(color), np.float32)
-    # cavity: darken grooves slightly so the detail also shows in viewers without normal maps
+    if f:
+        # real cloth is never one flat colour: dye mottling, fibre heathering and (denim) white weft
+        alb = alb * (1 + 0.03 * (_noise((size, size), 45 * px_per_mm, rng) * keep)[..., None])
+        fib = rng.standard_normal((size, size)).astype(np.float32)
+        fib = _box(_box(fib, 1, 0), 1, 1)
+        alb = alb * (1 + f["heather"] * 1.8 * (fib * keep)[..., None])
+        if f.get("weft"):
+            wv = weave(f["kind"], size, px_per_mm, f["period_mm"], rng)
+            alb = alb + f["weft"] * ((wv - 0.5) * keep)[..., None] * (0.9 - alb)
+    # cavity: darken grooves so creases and stitching also show without normal mapping
     if f or height_path:
         hl = h - _box(_box(h, 6, 0), 6, 1)  # local relief only
-        alb = alb * np.clip(1 + 0.35 * hl[..., None], 0.75, 1.1)
+        hl = hl / (np.abs(hl).mean() + 1e-6)
+        alb = alb * np.clip(1 + 0.04 * hl[..., None], 0.8, 1.06)
+    if ao is not None:
+        # squeezed UV strips can't hold occlusion detail either (it shows as blocks): fade it there too
+        ao = 1 - (1 - np.clip(ao, 0, 1)) * keep
+        alb = alb * (0.5 + 0.5 * ao)[..., None]
     a_path = out_prefix + "_albedo.jpg"
     n_path = out_prefix + "_normal.jpg"
     Image.fromarray((np.clip(alb, 0, 1) * 255).astype(np.uint8)).save(a_path, quality=92)
     Image.fromarray(((n * 0.5 + 0.5) * 255).clip(0, 255).astype(np.uint8)).save(n_path, quality=94)
-    rough = f["rough"] if f else 0.8
-    return a_path, n_path, rough
+    mat = {"roughness": f["rough"] if f else 0.8, "sheen": f["sheen"] if f else 0.3,
+           "sheen_roughness": f["sheen_rough"] if f else 0.5, "specular": f["spec"] if f else 0.3}
+    m = mask if mask is not None else np.ones((size, size), bool)
+    mean = alb[m].mean(0) if m.any() else np.full(3, 0.5)
+    mat["sheen_tint"] = tuple(float(x) for x in (0.5 * mean / (mean.max() + 1e-6) + 0.5))
+    return a_path, n_path, mat
 
 
 def mask_from_polys(polys_uv, size):

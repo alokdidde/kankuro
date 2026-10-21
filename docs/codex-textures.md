@@ -12,8 +12,10 @@ Each garment can take up to three images. All three are painted on the **same UV
 Prefer a **height map over a normal map**. Image models paint height maps reliably because they are
 just greyscale. Normal maps they often get wrong: the colour channels end up mixed up, or lighting
 gets baked in. The CLI turns the height map into a correct normal map itself. Even with no height
-map, the CLI adds its own fabric relief (weave, stitching, folds) from the garment's `--fabric`
-preset, so a plain albedo still looks 3D.
+map, the CLI adds its own fabric relief (weave, stitching, folds, creases at the joints) from the
+garment's `--fabric` preset, multiplies in ambient occlusion baked from the dressed character, and
+uses a cloth-sheen material, so a plain albedo still looks 3D. Don't paint shading into the albedo:
+the CLI adds it, and painted shadows would double it.
 
 ## 1. Get the template
 

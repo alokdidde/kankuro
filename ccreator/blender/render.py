@@ -46,11 +46,14 @@ def _setup(size, samples):
     sc.world.use_nodes = True
     bg = sc.world.node_tree.nodes["Background"]
     bg.inputs[0].default_value = (0.82, 0.84, 0.88, 1)
-    bg.inputs[1].default_value = 0.6
+    bg.inputs[1].default_value = 0.8
     if "_key" not in bpy.data.objects:
-        for name, rot, energy in (("_key", (50, 0, -35), 3.5), ("_fill", (60, 0, 140), 1.2)):
+        # soft, broad suns (studio-like): hard pin-point light makes cloth read as plastic
+        for name, rot, energy, ang in (("_key", (50, 0, -35), 3.0, 14), ("_fill", (60, 0, 140), 1.0, 30),
+                                       ("_rim", (110, 0, 170), 1.2, 10)):
             ld = bpy.data.lights.new(name, "SUN")
             ld.energy = energy
+            ld.angle = math.radians(ang)
             lo = bpy.data.objects.new(name, ld)
             lo.rotation_euler = [math.radians(a) for a in rot]
             sc.collection.objects.link(lo)

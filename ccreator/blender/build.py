@@ -267,29 +267,48 @@ def hide_body(body_obj, covers, max_dist=0.06):
     return len(kill)
 
 
-def _garment_material(g, gobj, project, work_dir, spec, b):
-    """Bake albedo + normal maps for a garment (fabric preset, stitching, optional user maps)."""
+def _garment_materials(items, project, work_dir, spec, b):
+    """Bake albedo + normal maps for garments (fabric preset, stitching, creases, AO, optional user maps)
+    and assign their materials.
+
+    Runs once every garment exists, so occlusion from outer layers, hair and the body is included.
+    The Blender-side sampling runs first; the numpy texture bakes then run in parallel threads."""
+    from concurrent.futures import ThreadPoolExecutor
+
     from .. import fabric
-    gdef = catalog.GARMENTS.get(g.get("type"), {})
-    fab = g.get("fabric", gdef.get("fabric", "cotton"))
+    from . import clothshade
     size = int(spec["export"].get("texture_size", 2048))
-    has_uv = bool(gobj.data.uv_layers)
-    color = g.get("color") or "#8a8f99"
-    tex = os.path.join(project, g["texture"]) if g.get("texture") else None
-    if not has_uv or (fab == "none" and not g.get("normal") and not g.get("height")):
-        return materials.make(f"Garment_{g['id']}", color=color, image_path=tex,
-                              roughness=g.get("roughness", 0.8), double_sided=True)
-    mask, uv_per_m = None, 0.45
-    if g["id"] in b.uv_info:
-        mask = fabric.mask_from_polys(garments.uv_polygons(gobj), size)
-        uv_per_m = b.uv_info[g["id"]]["scale_px_per_m"]
-    albedo, normal, rough = fabric.bake(
-        os.path.join(work_dir, f"garment_{g['id']}"), size, uv_per_m, mask=mask, color=color, albedo_path=tex,
-        fabric=fab, height_path=os.path.join(project, g["height"]) if g.get("height") else None,
-        normal_path=os.path.join(project, g["normal"]) if g.get("normal") else None,
-        strength=float(g.get("normal_strength", 1.0)))
-    return materials.make(f"Garment_{g['id']}", image_path=albedo, roughness=g.get("roughness", rough),
-                          double_sided=True, normal_path=normal)
+    jobs = []
+    for g, gobj in items:
+        gdef = catalog.GARMENTS.get(g.get("type"), {})
+        fab = g.get("fabric", gdef.get("fabric", "cotton"))
+        color = g.get("color") or "#8a8f99"
+        tex = os.path.join(project, g["texture"]) if g.get("texture") else None
+        gobj.data.materials.clear()
+        if not gobj.data.uv_layers or (fab == "none" and not g.get("normal") and not g.get("height")):
+            gobj.data.materials.append(materials.make(f"Garment_{g['id']}", color=color, image_path=tex,
+                                                      roughness=g.get("roughness", 0.8), double_sided=True))
+            continue
+        mask, uv_per_m = None, 0.45
+        if g["id"] in b.uv_info:
+            mask = fabric.mask_from_polys(garments.uv_polygons(gobj), size)
+            uv_per_m = b.uv_info[g["id"]]["scale_px_per_m"]
+        hangs = gdef.get("source_group") == "helper-skirt" or any(k in gdef for k in ("drape", "loose", "flare"))
+        ao, chain_s, crease_w, detail = clothshade.bake_maps(gobj, b.arm, b.body, b.meshes, b.res.bones, size,
+                                                             leg_creases=not hangs)
+        kw = dict(mask=mask, color=color, albedo_path=tex, fabric=fab,
+                  height_path=os.path.join(project, g["height"]) if g.get("height") else None,
+                  normal_path=os.path.join(project, g["normal"]) if g.get("normal") else None,
+                  strength=float(g.get("normal_strength", 1.0)), ao=ao, chain_s=chain_s, crease_w=crease_w,
+                  detail=detail)
+        jobs.append((g, gobj, os.path.join(work_dir, f"garment_{g['id']}"), uv_per_m, kw))
+    with ThreadPoolExecutor(max_workers=min(4, max(1, len(jobs)))) as ex:
+        results = list(ex.map(lambda j: fabric.bake(j[2], size, j[3], **j[4]), jobs))
+    for (g, gobj, *_), (albedo, normal, m) in zip(jobs, results):
+        gobj.data.materials.append(materials.make(
+            f"Garment_{g['id']}", image_path=albedo, roughness=g.get("roughness", m["roughness"]),
+            double_sided=True, normal_path=normal, specular=m["specular"], sheen=m["sheen"],
+            sheen_roughness=m["sheen_roughness"], sheen_tint=m["sheen_tint"]))
 
 
 def layer_of(g):
@@ -356,7 +375,7 @@ def build_scene(spec, project, work_dir):
         t = _tick(b, "hair", t)
 
     # garments, inner layers first
-    covers, covers_all = [], []
+    covers, covers_all, to_shade = [], [], []
     order = sorted(spec["garments"], key=lambda g: (g.get("layer", catalog.GARMENTS.get(g.get("type"), {}).get("layer", 1))))
     for rank, g in enumerate(order):
         if g.get("source"):
@@ -376,8 +395,7 @@ def build_scene(spec, project, work_dir):
             b.uv_info[g["id"]] = info
             keep_mats = False
         if not keep_mats:
-            gobj.data.materials.clear()
-            gobj.data.materials.append(_garment_material(g, gobj, project, work_dir, spec, b))
+            to_shade.append((g, gobj))
         gobj["garment_id"] = g["id"]
         if g.get("hide_body", True):
             covers.append(gobj)
@@ -385,6 +403,9 @@ def build_scene(spec, project, work_dir):
         b.meshes.append(gobj)
     if spec["garments"]:
         t = _tick(b, "garments", t)
+    if to_shade:
+        _garment_materials(to_shade, project, work_dir, spec, b)
+        t = _tick(b, "garment_textures", t)
     if "res" in _REF:
         bpy.data.objects.remove(_REF.pop("res").arm, do_unlink=True)
     if spec["export"].get("hide_body_under_clothes", True) and covers:
