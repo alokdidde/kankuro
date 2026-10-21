@@ -77,7 +77,9 @@ def cmd_catalog(a):
         "presets": specmod.PRESETS,
         "body_sliders": {k: {"default": round(d, 4), "range": [0, 1], "desc": desc} for k, (d, desc) in morph.MACROS.items()},
         "hair_styles": {k: v["desc"] for k, v in catalog.HAIR_STYLES.items()},
-        "garments": {k: {"desc": v["desc"], "slot": v["slot"], "layer": v["layer"]} for k, v in catalog.GARMENTS.items()},
+        "garments": {k: {"desc": v["desc"], "slot": v["slot"], "layer": v["layer"], "fabric": v.get("fabric")}
+                     for k, v in catalog.GARMENTS.items()},
+        "fabrics": {k: v["desc"] for k, v in __import__("ccreator.fabric", fromlist=["FABRICS"]).FABRICS.items()},
         "detail_morphs": f"{len(morph.modifier_catalog())} modifiers; list with `ccreator morphs`",
         "animations": "list with `ccreator animations`",
     }
@@ -178,6 +180,18 @@ def cmd_garment(a):
         g["hide_body"] = a.hide_body == "true"
     if a.roughness is not None:
         g["roughness"] = a.roughness
+    if a.fabric is not None:
+        from . import fabric
+        if a.fabric not in fabric.FABRICS and a.fabric != "none":
+            raise CliError("unknown_fabric", f"Unknown fabric '{a.fabric}'",
+                           hint="Valid: none, " + ", ".join(fabric.FABRICS))
+        g["fabric"] = a.fabric
+    for key, kind in (("normal", "textures"), ("height", "textures")):
+        val = getattr(a, key)
+        if val is not None:
+            g[key] = specmod.import_file(p, val, kind) if val else None
+    if a.normal_strength is not None:
+        g["normal_strength"] = a.normal_strength
     specmod.save(p, s)
     out = {"garment": g, "garments": s["garments"]}
     if replaced:
@@ -429,7 +443,7 @@ SCHEMA = {
     "hair remove": "bald",
     "garment add <type> [--id ID] [--color HEX] [--texture PNG] [--layer N] [--keep-slot]": "add a standard garment (replaces others in its slot unless --keep-slot)",
     "garment import --file MESH --id ID [--texture PNG] [--color HEX]": "custom garment authored on the reference body",
-    "garment set <id> [--color HEX] [--texture PNG|''] [--layer N] [--hide-body true|false]": "change a garment",
+    "garment set <id> [--color HEX] [--texture PNG|''] [--fabric NAME|none] [--normal PNG] [--height PNG] [--normal-strength F] [--layer N] [--hide-body true|false]": "change a garment; texture = albedo, height/normal add 3D relief on the same UV template",
     "garment remove <id>": "remove a garment",
     "template [targets...] [--out DIR] [--size PX]": "write UV template + mask PNGs (garment ids/types, 'body', or 'all')",
     "build [--out GLB] [--animations A,B|all] [--render]": "build and export the rigged GLB",
@@ -483,6 +497,10 @@ def parser():
     x.add_argument("--layer", type=int)
     x.add_argument("--roughness", type=float)
     x.add_argument("--hide-body", choices=["true", "false"])
+    x.add_argument("--fabric", help="surface detail preset (see `catalog fabrics`) or 'none'")
+    x.add_argument("--normal", help="tangent-space normal map PNG (OpenGL/+Y) on the garment UV template")
+    x.add_argument("--height", help="greyscale height/bump PNG on the template (white = raised); turned into normals")
+    x.add_argument("--normal-strength", type=float)
     x.add_argument("--keep-slot", action="store_true")
 
     x = sp.add_parser("template")

@@ -52,8 +52,18 @@ ccreator template tshirt          # templates/tshirt_template.png + tshirt_mask.
 #   -> give the template to the image model: "paint a denim shirt design on this flat sketch,
 #      left = front, right = back seen from behind, keep inside the grey shape"
 ccreator garment set tshirt --texture ./denim_shirt.png
+ccreator garment set tshirt --height ./denim_shirt_height.png   # optional: greyscale relief, white = raised
 ccreator render --views front,back
 ```
+
+Every garment also gets **fabric relief** baked into a normal map, so clothes don't look flat even
+with a plain colour. Each garment type has a default fabric (`catalog fabrics`: cotton, denim, knit,
+canvas, leather, silk, spandex), and `--fabric NAME|none` overrides it. The relief combines the weave,
+hem and seam stitching along the outline, and soft folds. A supplied `--height` map is added on top,
+and a supplied `--normal` map (OpenGL / +Y green) is blended in. `--normal-strength` scales the result.
+The maps are written to `build/work/garment_<id>_albedo.jpg` and `_normal.jpg` and exported as glTF `baseColorTexture`
+and `normalTexture`. `export.texture_size` (default 2048) sets their resolution.
+[docs/codex-textures.md](docs/codex-textures.md) has the exact image-model prompts and file specs.
 
 The UV layout comes from a fixed reference body, so **one texture fits that garment on every body
 shape**. `ccreator template body` gives the skin layout (MakeHuman UVs) for `ccreator skin --texture`.
@@ -93,7 +103,7 @@ Run `ccreator schema` for the machine-readable list. In brief:
 | `morphs [--group] [--search]` | detailed morph modifiers (nose, jaw, torso, limbs, ...) |
 | `skin [--color] [--texture] [--brow-color]` | skin tone or painted skin texture |
 | `hair set/import/remove` | hair |
-| `garment add/import/set/remove` | clothes; adding a garment replaces any other in the same slot unless `--keep-slot` |
+| `garment add/import/set/remove` | clothes; `--texture`, `--fabric`, `--height`, `--normal` for surface; adding a garment replaces any other in the same slot unless `--keep-slot` |
 | `template [ids|types|body|all]` | UV template + mask PNGs |
 | `render [--views] [--focus] [--animation --frame]` | preview PNGs + a combined sheet |
 | `build [--animations A,B|all] [--render]` | export the GLB |
@@ -120,6 +130,7 @@ ccreator/spec.py           character.json schema, presets, validation
 ccreator/morph.py          MakeHuman macro/detail morphs (numpy)
 ccreator/catalog.py        hair styles and garment definitions
 ccreator/textures.py       skin map, UV templates
+ccreator/fabric.py         fabric relief: weave/stitch/fold height -> normal map, albedo bake
 ccreator/blender/*.py      body + skeleton fit, garments, hair, materials, render, anim, autorig, validate
 ccreator/data/             compiled CC0 assets (tools/build_data.py regenerates them)
 tests/test_cli.py          end-to-end tests (python -m unittest discover tests)

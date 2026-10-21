@@ -84,6 +84,25 @@ class BuildCommands(unittest.TestCase):
         self.assertTrue(os.path.exists(out["sheet"]))
 
 
+    def test_fabric_maps(self):
+        out = cc("template", "skirt", "--size", "512", project=self.p)
+        mask = out["templates"]["skirt"]["mask"]
+        cc("garment", "set", "skirt", "--fabric", "denim", "--height", mask, project=self.p)
+        bad = cc("garment", "set", "skirt", "--fabric", "velvet", project=self.p, ok=False)
+        self.assertEqual(bad["error"]["code"], "unknown_fabric")
+        out = cc("build", project=self.p)
+        mats = {m["name"]: m for m in glb_json(out["glb"])["materials"]}
+        self.assertIn("normalTexture", mats["Garment_skirt"])
+        self.assertIn("normalTexture", mats["Garment_tanktop"])  # default fabric preset
+
+
+def glb_json(path):
+    with open(path, "rb") as f:
+        data = f.read()
+    n = int.from_bytes(data[12:16], "little")
+    return json.loads(data[20:20 + n])
+
+
 class AutoRig(unittest.TestCase):
     def test_autorig_reference_body(self):
         tmp = tempfile.mkdtemp()

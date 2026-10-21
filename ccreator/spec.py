@@ -38,7 +38,7 @@ def default_spec(name="character", preset="neutral"):
         "eyes": {"iris_color": None},
         "hair": None,
         "garments": [],
-        "export": {"animations": [], "hide_body_under_clothes": True},
+        "export": {"animations": [], "hide_body_under_clothes": True, "texture_size": 2048},
     }
 
 
@@ -110,8 +110,9 @@ def validate(spec, project):
             raise CliError("unknown_garment", f"Unknown garment type '{g['type']}'",
                            hint=f"Valid: {', '.join(catalog.GARMENTS)}")
         color(g.get("color"), f"garments[{g['id']}].color")
-        if g.get("texture"):
-            _check_file(project, g["texture"], f"garments[{g['id']}].texture")
+        for key in ("texture", "normal", "height"):
+            if g.get(key):
+                _check_file(project, g[key], f"garments[{g['id']}].{key}")
 
 
 def _check_file(project, rel, field):
@@ -166,6 +167,7 @@ SETTABLE = {
     "skin.brow_color": (str, type(None)),
     "eyes.iris_color": (str, type(None)),
     "export.hide_body_under_clothes": bool,
+    "export.texture_size": int,
 }
 
 

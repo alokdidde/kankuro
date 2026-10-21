@@ -22,52 +22,52 @@ HAIR_STYLES = {
 #   offset: distance from the skin; layer: stacking order (higher sits outside lower layers)
 GARMENTS = {
     "tshirt": {
-        "desc": "Short-sleeve crew-neck T-shirt", "slot": "top", "layer": 1, "offset": 0.006,
+        "fabric": "cotton", "desc": "Short-sleeve crew-neck T-shirt", "slot": "top", "layer": 1, "offset": 0.006,
         "regions": {"torso": [0.1, 1], "clavicle_*": [0, 1], "upperarm_*": [0, 0.45]},
     },
     "longsleeve": {
-        "desc": "Long-sleeve crew-neck top", "slot": "top", "layer": 1, "offset": 0.006,
+        "fabric": "cotton", "desc": "Long-sleeve crew-neck top", "slot": "top", "layer": 1, "offset": 0.006,
         "regions": {"torso": [0.1, 1], "clavicle_*": [0, 1], "upperarm_*": [0, 1], "lowerarm_*": [0, 0.92]},
     },
     "tanktop": {
-        "desc": "Sleeveless tank top", "slot": "top", "layer": 1, "offset": 0.005,
+        "fabric": "cotton", "desc": "Sleeveless tank top", "slot": "top", "layer": 1, "offset": 0.005,
         "regions": {"torso": [0.1, 0.93]},
     },
     "jacket": {
-        "desc": "Loose long-sleeve outer layer covering the hips", "slot": "outer", "layer": 3, "offset": 0.012,
+        "fabric": "canvas", "desc": "Loose long-sleeve outer layer covering the hips", "slot": "outer", "layer": 3, "offset": 0.012,
         "weight_smooth": 16,
         "regions": {"torso": [-0.04, 1], "clavicle_*": [0, 1], "upperarm_*": [0, 1], "lowerarm_*": [0, 0.9]},
     },
     "pants": {
-        "desc": "Full-length trousers", "slot": "bottom", "layer": 2, "offset": 0.008,
+        "fabric": "denim", "desc": "Full-length trousers", "slot": "bottom", "layer": 2, "offset": 0.008,
         "regions": {"torso": [0, 0.16], "thigh_*": [0, 1], "calf_*": [0, 0.9]},
     },
     "shorts": {
-        "desc": "Mid-thigh shorts", "slot": "bottom", "layer": 2, "offset": 0.008,
+        "fabric": "denim", "desc": "Mid-thigh shorts", "slot": "bottom", "layer": 2, "offset": 0.008,
         "regions": {"torso": [0, 0.16], "thigh_*": [0, 0.5]},
     },
     "leggings": {
-        "desc": "Skin-tight ankle-length leggings", "slot": "bottom", "layer": 0, "offset": 0.002,
+        "fabric": "spandex", "desc": "Skin-tight ankle-length leggings", "slot": "bottom", "layer": 0, "offset": 0.002,
         "regions": {"torso": [0, 0.14], "thigh_*": [0, 1], "calf_*": [0, 0.93]},
     },
     "skirt": {
-        "desc": "Knee-length skirt (MakeHuman skirt helper)", "slot": "bottom", "layer": 2, "offset": 0.004,
+        "fabric": "cotton", "desc": "Knee-length skirt (MakeHuman skirt helper)", "slot": "bottom", "layer": 2, "offset": 0.004,
         "source_group": "helper-skirt", "length": 0.55,
     },
     "long_skirt": {
-        "desc": "Ankle-length skirt (MakeHuman skirt helper)", "slot": "bottom", "layer": 2, "offset": 0.004,
+        "fabric": "silk", "desc": "Ankle-length skirt (MakeHuman skirt helper)", "slot": "bottom", "layer": 2, "offset": 0.004,
         "source_group": "helper-skirt", "length": 1.0,
     },
     "shoes": {
-        "desc": "Closed shoes with a sole", "slot": "feet", "layer": 2, "offset": 0.007,
+        "fabric": "leather", "desc": "Closed shoes with a sole", "slot": "feet", "layer": 2, "offset": 0.007,
         "regions": {"foot_*": [0, 1], "ball_*": [0, 1], "calf_*": [0.9, 1]}, "sole": 0.018,
     },
     "boots": {
-        "desc": "Mid-calf boots", "slot": "feet", "layer": 3, "offset": 0.008,
+        "fabric": "leather", "desc": "Mid-calf boots", "slot": "feet", "layer": 3, "offset": 0.008,
         "regions": {"foot_*": [0, 1], "ball_*": [0, 1], "calf_*": [0.45, 1]}, "sole": 0.022,
     },
     "gloves": {
-        "desc": "Full-finger gloves", "slot": "hands", "layer": 2, "offset": 0.003, "source_group": "body",
+        "fabric": "leather", "desc": "Full-finger gloves", "slot": "hands", "layer": 2, "offset": 0.003, "source_group": "body",
         "regions": {"hand_*": [0, 1], "lowerarm_*": [0.88, 1], "thumb_*": [0, 1], "index_*": [0, 1],
                     "middle_*": [0, 1], "ring_*": [0, 1], "pinky_*": [0, 1]},
     },

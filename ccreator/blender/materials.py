@@ -16,10 +16,19 @@ def srgb_to_linear(c):
     return np.where(c <= 0.04045, c / 12.92, ((c + 0.055) / 1.055) ** 2.4)
 
 
-def make(name, color=None, image_path=None, roughness=0.6, metallic=0.0, double_sided=False):
+def make(name, color=None, image_path=None, roughness=0.6, metallic=0.0, double_sided=False,
+         normal_path=None, normal_strength=1.0):
     mat = bpy.data.materials.new(name)
     nt = mat.node_tree
     bsdf = nt.nodes.get("Principled BSDF")
+    if normal_path:
+        ntex = nt.nodes.new("ShaderNodeTexImage")
+        ntex.image = bpy.data.images.load(os.path.abspath(normal_path))
+        ntex.image.colorspace_settings.name = "Non-Color"
+        nmap = nt.nodes.new("ShaderNodeNormalMap")
+        nmap.inputs["Strength"].default_value = normal_strength
+        nt.links.new(ntex.outputs["Color"], nmap.inputs["Color"])
+        nt.links.new(nmap.outputs["Normal"], bsdf.inputs["Normal"])
     bsdf.inputs["Roughness"].default_value = roughness
     bsdf.inputs["Metallic"].default_value = metallic
     if image_path:

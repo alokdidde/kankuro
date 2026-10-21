@@ -179,6 +179,31 @@ def hide_body(body_obj, covers, max_dist=0.06):
     return len(kill)
 
 
+def _garment_material(g, gobj, project, work_dir, spec, b):
+    """Bake albedo + normal maps for a garment (fabric preset, stitching, optional user maps)."""
+    from .. import fabric
+    gdef = catalog.GARMENTS.get(g.get("type"), {})
+    fab = g.get("fabric", gdef.get("fabric", "cotton"))
+    size = int(spec["export"].get("texture_size", 2048))
+    has_uv = bool(gobj.data.uv_layers)
+    color = g.get("color") or "#8a8f99"
+    tex = os.path.join(project, g["texture"]) if g.get("texture") else None
+    if not has_uv or (fab == "none" and not g.get("normal") and not g.get("height")):
+        return materials.make(f"Garment_{g['id']}", color=color, image_path=tex,
+                              roughness=g.get("roughness", 0.8), double_sided=True)
+    mask, uv_per_m = None, 0.45
+    if g["id"] in b.uv_info:
+        mask = fabric.mask_from_polys(garments.uv_polygons(gobj), size)
+        uv_per_m = b.uv_info[g["id"]]["scale_px_per_m"]
+    albedo, normal, rough = fabric.bake(
+        os.path.join(work_dir, f"garment_{g['id']}"), size, uv_per_m, mask=mask, color=color, albedo_path=tex,
+        fabric=fab, height_path=os.path.join(project, g["height"]) if g.get("height") else None,
+        normal_path=os.path.join(project, g["normal"]) if g.get("normal") else None,
+        strength=float(g.get("normal_strength", 1.0)))
+    return materials.make(f"Garment_{g['id']}", image_path=albedo, roughness=g.get("roughness", rough),
+                          double_sided=True, normal_path=normal)
+
+
 def layer_of(g):
     return g.get("layer", catalog.GARMENTS.get(g.get("type"), {}).get("layer", 1))
 
@@ -257,13 +282,7 @@ def build_scene(spec, project, work_dir):
             keep_mats = False
         if not keep_mats:
             gobj.data.materials.clear()
-            img = None
-            if g.get("texture"):
-                img = materials.tinted_image(os.path.join(project, g["texture"]), g.get("tint"),
-                                             os.path.join(work_dir, f"garment_{g['id']}.png"))
-            gobj.data.materials.append(materials.make(f"Garment_{g['id']}", color=g.get("color") or "#8a8f99",
-                                                      image_path=img, roughness=g.get("roughness", 0.8),
-                                                      double_sided=True))
+            gobj.data.materials.append(_garment_material(g, gobj, project, work_dir, spec, b))
         gobj["garment_id"] = g["id"]
         if g.get("hide_body", True):
             covers.append(gobj)
