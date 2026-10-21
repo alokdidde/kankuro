@@ -96,8 +96,9 @@ python tools/smoke_test.py ./unpacked/kankuro-0.1.0-linux-x64/kankuro     # afte
    * creates the GitHub release with all files, a download table, auto-generated notes, and
      `SHA256SUMS.txt`.
 
-To try the whole pipeline without publishing, run **Actions > Release > Run workflow** on a branch.
-The bundles appear as workflow artifacts instead of a release.
+Pull requests that change packaging (`release.yml`, `tools/make_bundle.py`, `tools/smoke_test.py`,
+`pyproject.toml`) run the same pipeline as a dry run, and so does **Actions > Release > Run workflow**
+on any branch. The bundles appear as workflow artifacts instead of a release.
 
 ## Publishing to PyPI (optional, one-time setup)
 
