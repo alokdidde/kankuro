@@ -1,7 +1,26 @@
-# ccreator: character creator CLI for AI agents
+<!-- Logo goes here once generated: docs/images/logo.png -->
+# kankuro
 
-`ccreator` builds rigged, game-ready 3D humans from a small JSON spec, in the spirit of Reallusion
-Character Creator. It's meant to be driven by AI agents: every command prints one JSON object, errors
+**A character creator CLI for AI agents.** Rigged, game-ready 3D humans from a small JSON spec,
+in the spirit of Reallusion Character Creator, built on Blender and the Mesh2Motion skeleton.
+
+[![CI](https://github.com/alokdidde/kankuro/actions/workflows/ci.yml/badge.svg)](https://github.com/alokdidde/kankuro/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/alokdidde/kankuro?include_prereleases)](https://github.com/alokdidde/kankuro/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![Platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20macOS%20arm64%20%7C%20Windows-informational)
+
+<p align="center">
+  <img src="examples/saree_woman.png" alt="A character in a saree, front, side and back views" width="100%">
+</p>
+
+**[Install](docs/installation.md)** · **[Getting started](docs/getting-started.md)** ·
+**[CLI reference](docs/cli-reference.md)** · **[For AI agents](docs/agents.md)** ·
+**[Docs](docs/README.md)**
+
+The command is `kankuro`; `ccreator` is the same command under its original name, and the examples
+below use it.
+
+It's meant to be driven by AI agents: every command prints one JSON object, errors
 carry a `code` and a `hint`, the whole character lives in one inspectable `character.json`, and
 `render` produces PNGs the agent can look at.
 
@@ -23,12 +42,21 @@ The CLI never calls an image model. New textures always come in as files.
 
 ## Install
 
+Download the bundle for your platform from the
+[latest release](https://github.com/alokdidde/kankuro/releases/latest), unpack it, and run
+`./kankuro schema` (`kankuro.cmd schema` on Windows). Bundles include Python 3.13 and Blender's
+`bpy`, so nothing else is needed. Linux x64, macOS Apple Silicon, Windows x64 and Windows ARM64
+are supported.
+
+Or with [uv](https://docs.astral.sh/uv/) / pip on Python 3.13:
+
 ```bash
-pip install bpy==5.2.* numpy pillow     # bpy 5.2 needs Python 3.13
-pip install -e .                         # provides the `ccreator` command (or use `python -m ccreator`)
+uv tool install --python 3.13 git+https://github.com/alokdidde/kankuro
+# or: pip install git+https://github.com/alokdidde/kankuro      (Python 3.13 only; bpy 5.2 needs it)
 ```
 
-Everything runs headless on CPU. Previews use Cycles on CPU, so no GPU is needed.
+Everything runs headless on CPU. Previews use Cycles on CPU, so no GPU is needed. Details and
+troubleshooting: [docs/installation.md](docs/installation.md).
 
 ## Quick start
 
@@ -203,3 +231,20 @@ tests/test_cli.py          end-to-end tests (python -m unittest discover tests)
   (makehumancommunity/makehuman).
 * Mesh2Motion human rig and animation clips: **CC0** (scottpetrovic/mesh2motion-app).
 * `tools/build_data.py` recompiles `ccreator/data` from those repositories.
+
+## Documentation
+
+| | |
+|---|---|
+| [Installation](docs/installation.md) | bundles, pip/uv, platforms, troubleshooting |
+| [Getting started](docs/getting-started.md) | a ten-minute walk-through |
+| [CLI reference](docs/cli-reference.md) | every command, option, output and error code |
+| [Character spec](docs/character-spec.md) | the `character.json` format |
+| [For AI agents](docs/agents.md) | the JSON contract, a good loop, a system prompt snippet |
+| [Garment textures](docs/codex-textures.md) | image-model prompts for retexturing clothes |
+| [Development](docs/development.md) | tests, CI, multi-platform builds, releases |
+
+## License
+
+The code is [MIT](LICENSE). The bundled body, rig and animation data are CC0 (see above). Release
+bundles also contain Python (PSF license) and Blender's `bpy` (GPL-3.0-or-later).

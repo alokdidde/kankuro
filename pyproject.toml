@@ -3,13 +3,32 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ccreator"
+name = "kankuro"
 version = "0.1.0"
 description = "Agent-friendly character creator CLI: MakeHuman body + Mesh2Motion skeleton, built with Blender (bpy)"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "alokdidde" }]
+keywords = ["3d", "character", "blender", "rigging", "mesh2motion", "gltf", "cli", "ai-agents"]
+classifiers = [
+    "Programming Language :: Python :: 3.13",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Topic :: Multimedia :: Graphics :: 3D Modeling",
+    "Environment :: Console",
+]
 requires-python = ">=3.13,<3.14"
 dependencies = ["bpy==5.2.*", "numpy", "pillow"]
 
+[project.urls]
+Homepage = "https://github.com/alokdidde/kankuro"
+Documentation = "https://github.com/alokdidde/kankuro/tree/main/docs"
+Issues = "https://github.com/alokdidde/kankuro/issues"
+
 [project.scripts]
+kankuro = "ccreator.cli:main"
 ccreator = "ccreator.cli:main"
 
 [tool.setuptools.packages.find]

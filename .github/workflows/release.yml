@@ -1,0 +1,149 @@
+name: Release
+
+# Push a tag like v0.2.0 to publish a GitHub release with:
+#   - kankuro-<v>-py3-none-any.whl + sdist  (pip/uv install; pulls the right bpy wheel per platform)
+#   - self-contained bundles (Python 3.13 + bpy + kankuro) for Linux x64, macOS arm64,
+#     Windows x64 and Windows arm64, each smoke-tested on its own runner
+#   - SHA256SUMS.txt
+# Run it by hand (Actions > Release > Run workflow) to build and test everything without publishing.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    uses: ./.github/workflows/ci.yml
+
+  dist:
+    name: Wheel and sdist
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Check versions agree
+        id: version
+        shell: python
+        run: |
+          import os, re, tomllib
+          v = tomllib.load(open("pyproject.toml", "rb"))["project"]["version"]
+          cli = re.search(r'^VERSION = "(.+)"', open("ccreator/cli.py").read(), re.M).group(1)
+          assert cli == v, f"ccreator/cli.py VERSION {cli} != pyproject.toml version {v}"
+          ref = os.environ["GITHUB_REF"]
+          if ref.startswith("refs/tags/"):
+              tag = ref.removeprefix("refs/tags/")
+              assert tag == f"v{v}", f"tag {tag} does not match pyproject.toml version {v} (expected v{v})"
+          open(os.environ["GITHUB_OUTPUT"], "a").write(f"version={v}\n")
+      - name: Build
+        run: |
+          python -m pip install build
+          python -m build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/*
+
+  bundle:
+    name: Bundle (${{ matrix.target }})
+    needs: dist
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, target: linux-x64, ext: tar.gz, launcher: kankuro }
+          - { os: macos-latest, target: macos-arm64, ext: tar.gz, launcher: kankuro }
+          - { os: windows-latest, target: windows-x64, ext: zip, launcher: kankuro.cmd }
+          - { os: windows-11-arm, target: windows-arm64, ext: zip, launcher: kankuro.cmd }
+    timeout-minutes: 45
+    env:
+      NAME: kankuro-${{ needs.dist.outputs.version }}-${{ matrix.target }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/download-artifact@v5
+        with:
+          name: dist
+          path: dist
+      - name: Build bundle
+        shell: bash
+        run: |
+          uv run --no-project --python 3.13 tools/make_bundle.py \
+            --wheel dist/kankuro-${{ needs.dist.outputs.version }}-py3-none-any.whl \
+            --name "$NAME" --version ${{ needs.dist.outputs.version }} --out bundles
+      - name: Unpack and smoke-test
+        shell: bash
+        run: |
+          mkdir unpacked
+          if [ "${{ matrix.ext }}" = zip ]; then
+            7z x -bd -ounpacked "bundles/$NAME.zip" > /dev/null
+          else
+            tar -xzf "bundles/$NAME.tar.gz" -C unpacked
+          fi
+          uv run --no-project --python 3.13 tools/smoke_test.py "unpacked/$NAME/${{ matrix.launcher }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bundle-${{ matrix.target }}
+          path: bundles/${{ env.NAME }}.${{ matrix.ext }}
+          compression-level: 0
+
+  release:
+    name: Publish GitHub release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [test, dist, bundle]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          path: assets
+          merge-multiple: true
+      - name: Checksums
+        working-directory: assets
+        run: sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > notes.md <<NOTES
+          ## Download
+
+          | platform | file |
+          |---|---|
+          | Linux x64 | \`kankuro-${{ needs.dist.outputs.version }}-linux-x64.tar.gz\` |
+          | macOS Apple Silicon | \`kankuro-${{ needs.dist.outputs.version }}-macos-arm64.tar.gz\` |
+          | Windows x64 | \`kankuro-${{ needs.dist.outputs.version }}-windows-x64.zip\` |
+          | Windows ARM64 | \`kankuro-${{ needs.dist.outputs.version }}-windows-arm64.zip\` |
+          | any (pip / uv, Python 3.13) | \`kankuro-${{ needs.dist.outputs.version }}-py3-none-any.whl\` |
+
+          The bundles include Python 3.13 and Blender's bpy, so nothing else is needed. Unpack and run \`./kankuro schema\` (\`kankuro.cmd schema\` on Windows).
+          Full instructions: https://github.com/${{ github.repository }}/blob/main/docs/installation.md
+
+          NOTES
+          gh release create "$GITHUB_REF_NAME" assets/* --repo "$GITHUB_REPOSITORY" \
+            --title "kankuro $GITHUB_REF_NAME" --notes-file notes.md --generate-notes
+
+  pypi:
+    name: Publish to PyPI
+    # Off until PyPI trusted publishing is set up (docs/releasing.md); then set the repo variable PUBLISH_PYPI=true.
+    if: startsWith(github.ref, 'refs/tags/v') && vars.PUBLISH_PYPI == 'true'
+    needs: [test, dist, bundle]
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          name: dist
+          path: dist
+      - uses: pypa/gh-action-pypi-publish@release/v1
