@@ -1,0 +1,118 @@
+{
+  "version": 1,
+  "name": "kk-village-farmer",
+  "body": {
+    "preset": "male",
+    "macros": {
+      "gender": 1.0,
+      "muscle": 0.55,
+      "age": 0.64,
+      "asian": 0.45,
+      "caucasian": 0.3,
+      "african": 0.25,
+      "weight": 0.42
+    },
+    "morphs": {},
+    "height_cm": 168
+  },
+  "skin": {
+    "color": "#7f4f32",
+    "texture": null,
+    "roughness": 0.6,
+    "lips": true,
+    "brows": true,
+    "brow_color": "#231c18",
+    "brow_thickness": 1.45,
+    "brow_arch": -0.1,
+    "brow_density": 1.4,
+    "brow_length": 1.05
+  },
+  "eyes": {
+    "iris_color": "#3b2416"
+  },
+  "face": {
+    "blendshapes": "arkit52",
+    "shape": {
+      "brows.ridge": 0.5,
+      "eyes.openness": -0.374,
+      "nose.width": 0.54,
+      "nose.hump": 0.305,
+      "jaw.width": 0.733,
+      "chin.projection": 0.398,
+      "cheeks.volume": -0.51,
+      "head.age": 0.3,
+      "head.width": 0.251,
+      "head.length": -0.128,
+      "head.depth": 0.038,
+      "head.fat": -0.03,
+      "forehead.height": -0.111,
+      "forehead.slope": -0.072,
+      "forehead.bulge": -0.065,
+      "brows.height": 0.049,
+      "brows.tilt": 0.074,
+      "eyes.size": 0.125,
+      "eyes.spacing": 0.048,
+      "eyes.tilt": -0.03,
+      "eyes.lid_crease": -0.187,
+      "eyes.width": 0.031,
+      "nose.length": -0.192,
+      "nose.projection": -0.08,
+      "nose.height": -0.171,
+      "nose.bridge": 0.137,
+      "nose.nostrils": -0.026,
+      "nose.tip_width": -0.141,
+      "nose.tip_up": -0.194,
+      "nose.curve": -0.025,
+      "nose.volume": 0.057,
+      "mouth.width": -0.198,
+      "mouth.height": 0.033,
+      "mouth.protrusion": -0.077,
+      "mouth.upper_lip": -0.074,
+      "mouth.lower_lip": -0.05,
+      "mouth.corners": -0.026,
+      "mouth.cupids_bow": 0.048,
+      "mouth.philtrum": 0.1,
+      "jaw.drop": -0.076,
+      "chin.width": 0.043,
+      "chin.height": 0.038,
+      "cheeks.bones": 0.025,
+      "cheeks.inner": -0.103,
+      "cheeks.height": -0.059,
+      "ears.size": 0.088,
+      "ears.lobes": 0.087,
+      "ears.height": 0.023,
+      "neck.width": -0.078,
+      "head.oval": 0.205
+    },
+    "seed": 23
+  },
+  "hair": {
+    "style": "buzz",
+    "color": "#231c18"
+  },
+  "garments": [
+    {
+      "id": "kurta",
+      "type": "kurta",
+      "color": "#e8e0cf",
+      "fabric": "cotton"
+    },
+    {
+      "id": "dhoti",
+      "type": "dhoti",
+      "color": "#f1ece0",
+      "fabric": "cotton"
+    },
+    {
+      "id": "turban",
+      "type": "turban",
+      "color": "#c9a25a",
+      "fabric": "cotton"
+    }
+  ],
+  "export": {
+    "animations": [],
+    "hide_body_under_clothes": true,
+    "texture_size": 2048
+  }
+}

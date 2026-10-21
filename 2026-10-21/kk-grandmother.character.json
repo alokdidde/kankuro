@@ -1,0 +1,110 @@
+{
+  "version": 1,
+  "name": "kk-grandmother",
+  "body": {
+    "preset": "elder_female",
+    "macros": {
+      "gender": 0.0,
+      "age": 0.95,
+      "weight": 0.45,
+      "asian": 0.45,
+      "caucasian": 0.35,
+      "african": 0.2
+    },
+    "morphs": {},
+    "height_cm": 152
+  },
+  "skin": {
+    "color": "#9a6640",
+    "texture": null,
+    "roughness": 0.6,
+    "lips": true,
+    "brows": true,
+    "brow_color": "#8f8b86",
+    "brow_thickness": 0.8,
+    "brow_arch": 0.0,
+    "brow_density": 0.45,
+    "brow_length": 0.85
+  },
+  "eyes": {
+    "iris_color": "#3b2416"
+  },
+  "face": {
+    "blendshapes": "arkit52",
+    "shape": {
+      "head.round": 0.8,
+      "head.fat": 0.35,
+      "cheeks.volume": 0.32,
+      "chin.height": -0.453,
+      "nose.tip_width": 0.153,
+      "head.length": -0.346,
+      "head.width": -0.021,
+      "head.depth": -0.164,
+      "forehead.height": 0.077,
+      "forehead.slope": -0.131,
+      "forehead.bulge": -0.082,
+      "forehead.temples": -0.089,
+      "brows.height": -0.059,
+      "brows.ridge": -0.041,
+      "eyes.size": -0.143,
+      "eyes.spacing": -0.022,
+      "eyes.height": 0.11,
+      "eyes.openness": -0.079,
+      "eyes.lid_crease": 0.298,
+      "eyes.lid_fold": -0.077,
+      "eyes.width": -0.043,
+      "nose.width": 0.108,
+      "nose.length": 0.055,
+      "nose.projection": -0.105,
+      "nose.height": 0.176,
+      "nose.bridge": 0.088,
+      "nose.nostrils": -0.167,
+      "nose.flare": -0.123,
+      "nose.tip_up": 0.176,
+      "nose.hump": 0.038,
+      "nose.curve": 0.035,
+      "nose.volume": 0.149,
+      "mouth.width": 0.184,
+      "mouth.protrusion": 0.027,
+      "mouth.upper_lip": -0.025,
+      "mouth.lower_lip": -0.024,
+      "mouth.cupids_bow": -0.044,
+      "mouth.philtrum": 0.06,
+      "jaw.width": 0.13,
+      "jaw.drop": -0.156,
+      "chin.width": 0.07,
+      "chin.projection": -0.038,
+      "cheeks.bones": -0.192,
+      "cheeks.height": -0.073,
+      "ears.size": -0.061,
+      "ears.lobes": -0.118,
+      "ears.height": 0.034,
+      "neck.width": 0.085,
+      "head.rectangular": 0.148
+    },
+    "seed": 37
+  },
+  "hair": {
+    "style": "bun",
+    "color": "#6d6964"
+  },
+  "garments": [
+    {
+      "id": "blouse",
+      "type": "blouse",
+      "color": "#7a6a52",
+      "fabric": "cotton"
+    },
+    {
+      "id": "saree",
+      "type": "saree",
+      "color": "#e9dfc6",
+      "fabric": "cotton"
+    }
+  ],
+  "export": {
+    "animations": [],
+    "hide_body_under_clothes": true,
+    "texture_size": 2048
+  }
+}
