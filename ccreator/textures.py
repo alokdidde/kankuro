@@ -138,10 +138,12 @@ def skin_detail(out_prefix, size=2048, seed=5):
     return n_path
 
 
-def uv_template(polys_uv, out, title, size=2048, labels=(("FRONT", 0.25), ("BACK", 0.75)), mask_out=None):
+def uv_template(polys_uv, out, title, size=2048, labels=(("FRONT", 0.25), ("BACK", 0.75)), mask_out=None,
+                divider=True):
     """Draw a UV template sheet: garment area filled light grey, wireframe, panel labels.
 
-    polys_uv: list of polygons, each a list of (u, v). Returns paths."""
+    polys_uv: list of polygons, each a list of (u, v). labels: (text, u) at the top or (text, u, v).
+    Returns paths."""
     im = Image.new("RGB", (size, size), "white")
     dr = ImageDraw.Draw(im)
     mask = Image.new("L", (size, size), 0)
@@ -153,11 +155,13 @@ def uv_template(polys_uv, out, title, size=2048, labels=(("FRONT", 0.25), ("BACK
     for p in pts:
         dr.line(p + [p[0]], fill=(170, 170, 185), width=1)
     f = _font(size // 28)
-    for text, u in labels:
+    for text, u, *v in labels:
         w = dr.textlength(text, font=f)
-        dr.text((u * size - w / 2, size * 0.012), text, fill=(40, 40, 60), font=f)
+        y = (1 - v[0]) * size if v else size * 0.012
+        dr.text((u * size - w / 2, y), text, fill=(40, 40, 60), font=f)
     dr.text((size * 0.01, size - size // 22), title, fill=(90, 90, 110), font=_font(size // 45))
-    dr.line([(size / 2, 0), (size / 2, size)], fill=(200, 80, 80), width=2)
+    if divider:
+        dr.line([(size / 2, 0), (size / 2, size)], fill=(200, 80, 80), width=2)
     im.save(out)
     if mask_out:
         mask.save(mask_out)

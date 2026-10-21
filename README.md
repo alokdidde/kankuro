@@ -56,6 +56,13 @@ ccreator garment set tshirt --height ./denim_shirt_height.png   # optional: grey
 ccreator render --views front,back
 ```
 
+The **saree** has its own layout: the pleated skirt's front and back flat sketches at the bottom and
+the **pallu** unrolled as one long strip across the top (left = the end tucked at the right hip, then
+across the chest and over the left shoulder, right = the hanging end at the back). Paint the zari border
+along the strip's long edges and the skirt hem, and the decorated pallu end at the strip's right end.
+Wear it over `blouse`. `tools/saree_texture.py MASK OUT` paints a simple silk saree on that layout
+without an image model (`examples/saree_silk.png`).
+
 Every garment also gets **fabric relief** baked into a normal map, so clothes don't look flat even
 with a plain colour. Each garment type has a default fabric (`catalog fabrics`: cotton, denim, knit,
 canvas, leather, silk, spandex), and `--fabric NAME|none` overrides it. The relief combines the weave,

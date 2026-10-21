@@ -334,9 +334,15 @@ def cmd_template(a):
                 continue
             path = os.path.join(out_dir, f"{gid}_template.png")
             mask = os.path.join(out_dir, f"{gid}_mask.png")
-            textures.uv_template(garments.uv_polygons(m), path, f"ccreator {gid} UV template - left: front view, right: back view (seen from behind)",
-                                 size=a.size, mask_out=mask)
-            results[gid] = {"template": path, "mask": mask, "layout": "front_back_flat_sketch", "size": a.size}
+            info = b.uv_info.get(gid, {})
+            if info.get("labels"):
+                textures.uv_template(garments.uv_polygons(m), path, f"ccreator {gid} UV template ({info['layout']})",
+                                     size=a.size, mask_out=mask, labels=info["labels"], divider=False)
+            else:
+                textures.uv_template(garments.uv_polygons(m), path, f"ccreator {gid} UV template - left: front view, right: back view (seen from behind)",
+                                     size=a.size, mask_out=mask)
+            results[gid] = {"template": path, "mask": mask, "layout": info.get("layout", "front_back_flat_sketch"),
+                            "size": a.size}
     if "body" in want_types:
         from . import morph as mm
         import numpy as np

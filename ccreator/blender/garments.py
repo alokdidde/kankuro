@@ -444,6 +444,9 @@ def _shape(res, gdef, gid, verts, faces_local, keep):
         co = util.get_coords(obj)
         co[:, 2] = np.where(co[:, 2] < 0.012, 0.0, co[:, 2])
         util.set_coords(obj, co)
+    if gdef.get("drape") == "saree":
+        from . import drape
+        drape.shape_skirt(obj, res, gdef)
     return obj
 
 
@@ -543,6 +546,9 @@ def make(res, ref_res, body_obj, gid, gtype, layer_rank=0, worn=None):
         uvinfo = flat_sketch_uv(ref)
         uv = np.empty(len(ref.data.loops) * 2)
         ref.data.uv_layers["UVMap"].data.foreach_get("uv", uv)
+        if gdef.get("drape") == "saree":
+            from . import drape
+            uv, uvinfo = drape.saree_uv(uv, uvinfo)
         _UV_CACHE[gtype] = (keep, uv, uvinfo)
         bpy.data.objects.remove(ref, do_unlink=True)
     keep, uv, uvinfo = _UV_CACHE[gtype]
@@ -565,6 +571,11 @@ def make(res, ref_res, body_obj, gid, gtype, layer_rank=0, worn=None):
         util.set_coords(obj, co)
     layer = obj.data.uv_layers.get("UVMap") or obj.data.uv_layers.new(name="UVMap")
     layer.data.foreach_set("uv", uv)
+    if gdef.get("drape") == "saree":
+        from . import drape
+        pallu = drape.pallu(res, body_obj, obj, worn, gdef, uvinfo)
+        with bpy.context.temp_override(active_object=obj, selected_editable_objects=[obj, pallu], object=obj):
+            bpy.ops.object.join()
     sol = obj.modifiers.new("thickness", "SOLIDIFY")
     sol.thickness = 0.0015
     sol.offset = 1.0

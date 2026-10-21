@@ -67,6 +67,22 @@ GARMENTS = {
         "fabric": "silk", "desc": "Ankle-length skirt (MakeHuman skirt helper)", "slot": "bottom", "layer": 2, "offset": 0.004,
         "source_group": "helper-skirt", "length": 1.0,
     },
+    "blouse": {
+        "fabric": "silk", "desc": "Cropped sari blouse (choli): short sleeves, scoop neck, ends under the bust",
+        "slot": "top", "layer": 1, "offset": 0.004,
+        "regions": {"torso": [0.6, 1], "clavicle_*": [0, 1], "upperarm_*": [0, 0.38]},
+        "neckline": {"radius": 0.085, "front": 0.14, "back": 0.09},
+    },
+    "saree": {
+        "fabric": "silk", "desc": "Saree in the Nivi drape: floor-length skirt with front pleats and the pallu over "
+                                  "the left shoulder, hanging down the back (wear over a blouse)",
+        "slot": "bottom", "layer": 3, "offset": 0.004, "source_group": "helper-skirt", "length": 1.0,
+        # hem: height above the floor; pleats: front panel x range, fold count/depth, flare at the hem;
+        # pallu: how far its end hangs below the waist at the back, gap over what it lies on
+        "drape": "saree", "subdiv": 2, "hem": 0.025, "weight_smooth": 30,
+        "pleats": {"x": [-0.075, 0.085], "folds": 7, "depth": 0.014, "flare": 0.03},
+        "pallu": {"drop": 0.45, "gap": 0.007},
+    },
     "shoes": {
         "fabric": "leather", "desc": "Closed shoes with a sole", "slot": "feet", "layer": 2, "offset": 0.007,
         "regions": {"foot_*": [0, 1], "ball_*": [0, 1], "calf_*": [0.9, 1]}, "sole": 0.018,
