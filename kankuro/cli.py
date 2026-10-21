@@ -398,6 +398,8 @@ def cmd_skin(a):
         s["skin"]["texture"] = specmod.import_file(p, a.texture, "textures") if a.texture else None
     if a.brow_color:
         s["skin"]["brow_color"] = specmod.color(a.brow_color, "brow_color", "hair")
+    if a.detail is not None:
+        s["skin"]["detail"] = a.detail == "true"
     specmod.save(p, s)
     out = {"skin": s["skin"]}
     if s["skin"].get("texture"):
@@ -700,6 +702,7 @@ def parser():
     x.add_argument("--color")
     x.add_argument("--texture")
     x.add_argument("--brow-color")
+    x.add_argument("--detail", choices=["true", "false"])
 
     x = _sub("face")
     x.add_argument("action", choices=["list", "set", "preset", "randomize", "reset"])

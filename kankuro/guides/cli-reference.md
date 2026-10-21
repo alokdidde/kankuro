@@ -156,6 +156,7 @@ Values are parsed as JSON when they can be (`0.6`, `183`, `true`, `null`), other
 | `skin.color` | hex or [name](#colour-names) | whole-body skin tone |
 | `skin.roughness` | number | skin roughness (default 0.6) |
 | `skin.lips` / `skin.brows` | bool | tinted lips / eyebrows (strand cards plus a faint painted shadow) on or off |
+| `skin.detail` | bool | natural tone variation, cavity shading and a T-zone roughness map (default `true`) |
 | `skin.brow_color` | hex, hair-colour name or `null` | eyebrow colour (`null` = follow the hair colour) |
 | `skin.brow_thickness` / `brow_arch` / `brow_density` / `brow_length` | number | eyebrow shape, see [brows](#brows) |
 | `eyes.iris_color` | hex, eye-colour name or `null` | iris colour (`null` = the default brown eye texture) |
@@ -226,7 +227,7 @@ kankuro set "body.morphs.chin/chin-prognathism-decr|incr=0.3"
 Whole-body skin tone, a painted skin texture, and eyebrow colour.
 
 ```
-kankuro skin [--color HEX|NAME] [--texture PNG | --texture ""] [--brow-color HEX|NAME]
+kankuro skin [--color HEX|NAME] [--texture PNG | --texture ""] [--brow-color HEX|NAME] [--detail true|false]
 ```
 
 * `--color` takes `#RRGGBB` or a skin-tone name (see [Colour names](#colour-names)), e.g. `--color tan`.
@@ -234,6 +235,13 @@ kankuro skin [--color HEX|NAME] [--texture PNG | --texture ""] [--brow-color HEX
 
 * `--texture` takes a PNG painted on the body UV layout (`kankuro template body` gives the layout).
   Pass an empty string to remove it.
+
+* `--detail true|false` (`skin.detail`, default `true`): natural tone variation under the colour
+  (warmer cheeks and nose, darker upper lids and lash lines, a little shadow under the eyes), baked
+  cavity shading in the folds, a roughness map (shinier T-zone and lips, drier cheeks) and
+  subsurface/specular tuned to the tone, so faces keep their shape at darker tones such as
+  `golden_brown` and `brown`. `false` gives one flat tone. Ignored when a `--texture` is set
+  (paint the variation into it instead).
 
 Prints `{"skin": {...}}`.
 

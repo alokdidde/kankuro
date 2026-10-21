@@ -336,6 +336,15 @@ def layer_of(g):
     return g.get("layer", catalog.GARMENTS.get(g.get("type"), {}).get("layer", 1))
 
 
+def _skin_ao(res, body_obj, eyes):
+    """Per base-vertex ambient occlusion of the skin (eye sockets, nostrils, lips, ears, folds)."""
+    from . import clothshade
+    ao = clothshade.vertex_ao(body_obj, clothshade.scene_bvh([body_obj, eyes]), np.random.default_rng(11))
+    full = np.ones(len(res.coords))
+    full[np.asarray(body_obj["mh_verts"])] = ao
+    return full
+
+
 def _brow_shape(skin):
     """Brow band shape shared by the brow hairs and the shadow painted under them."""
     return {"thickness": skin.get("brow_thickness") or 1.0, "arch": skin.get("brow_arch") or 0.0,
@@ -417,17 +426,26 @@ def build_scene(spec, project, work_dir):
         hs = spec.get("hair") or {}
         # tint the scalp under procedural hair so it seems to grow out of the skin
         scalp = hair.coverage_mask(res, hobj) if hs.get("style") and not hs.get("source") else None
+        detail = skin.get("detail", True)
+        ao = _skin_ao(res, body_obj, eyes) if detail else None
         img = textures.skin_texture(skin["color"], os.path.join(work_dir, "skin.png"),
                                     lips=skin.get("lips", True), brows=skin.get("brows", True),
                                     brow_hex=skin.get("brow_color") or hs.get("color"), scalp=scalp,
-                                    scalp_hex=hs.get("color") or "#3b2a1e", brow_shape=_brow_shape(skin))
+                                    scalp_hex=hs.get("color") or "#3b2a1e", brow_shape=_brow_shape(skin),
+                                    detail=detail, ao=ao)
     skin_n = textures.skin_detail(os.path.join(work_dir, "skin"))
-    body_obj.data.materials.append(materials.make("Skin", image_path=img, roughness=skin.get("roughness", 0.6),
-                                                  normal_path=skin_n, subsurface=0.3, specular=0.35))
-    eye_img = os.path.join(rig.DATA, "eyes", "brown_eye.png")
-    if spec["eyes"].get("iris_color"):
-        eye_img = materials.recolor_iris(eye_img, spec["eyes"]["iris_color"], os.path.join(work_dir, "eyes.png"))
-    eyes.data.materials.append(materials.make("Eyes", image_path=eye_img, roughness=0.15))
+    rough = skin.get("roughness", 0.6)
+    if skin.get("detail", True):
+        shade = materials.skin_shading(skin["color"], rough)
+        rmap = textures.skin_roughness(shade.pop("roughness"), os.path.join(work_dir, "skin_roughness.png"))
+    else:
+        shade, rmap = dict(subsurface=0.3, specular=0.35), None
+    body_obj.data.materials.append(materials.make("Skin", image_path=img, roughness=rough, normal_path=skin_n,
+                                                  roughness_path=rmap, **shade))
+    eye_img = materials.eye_texture(os.path.join(rig.DATA, "eyes", "brown_eye.png"), os.path.join(work_dir, "eyes.png"),
+                                    spec["eyes"].get("iris_color"))
+    # a wet, clear coat over the eye gives the catchlight that makes it look alive
+    eyes.data.materials.append(materials.make("Eyes", image_path=eye_img, roughness=0.3, specular=0.5, coat=1.0))
 
     if skin.get("brows", True):
         bobj = hair_cards.brows(res, body_obj, density=skin.get("brow_density") or 1.0, **_brow_shape(skin))

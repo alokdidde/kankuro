@@ -116,12 +116,44 @@ def _blur(a, r=2):
     return np.apply_along_axis(lambda x: np.convolve(x, k, mode="same"), 1, a)
 
 
+def face_regions():
+    """Per base-vertex weights (0..1) of facial regions used for natural skin tone variation:
+    cheeks, nose, upper lids / eye sockets, lash lines, under-eye, T-zone (forehead and nose bridge)."""
+    co = morph.base()["coords"].astype(float)
+    r = {}
+    r["cheeks"] = np.clip(_target_mask(["cheek/l-cheek-volume-incr", "cheek/r-cheek-volume-incr",
+                                        "cheek/l-cheek-bones-incr", "cheek/r-cheek-bones-incr"]) * 1.4 - 0.2, 0, 1)
+    r["nose"] = np.clip(_target_mask(["nose/nose-volume-incr", "nose/nose-point-width-incr",
+                                      "nose/nose-flaring-incr"]) * 1.3 - 0.15, 0, 1)
+    lids = np.zeros(len(co))
+    lash = np.zeros(len(co))
+    under = np.zeros(len(co))
+    for side in ("l", "r"):
+        e, rad = eye_frame_base(side)
+        d = co - e
+        dist = np.linalg.norm(d[:, [0, 2]], axis=1) / rad  # in the face plane, in eye radii
+        front = d[:, 1] < rad * 0.9  # skin in front of the eyeball (characters face -Y)
+        up = d[:, 2] > -0.15 * rad
+        lids = np.maximum(lids, front * up * np.clip(1 - np.abs(dist - 1.35) / 0.55, 0, 1))
+        lash = np.maximum(lash, front * (d[:, 2] > 0.05 * rad) * np.clip(1 - np.abs(dist - 1.0) / 0.18, 0, 1))
+        under = np.maximum(under, front * (d[:, 2] < -0.3 * rad) * np.clip(1 - np.abs(dist - 1.4) / 0.45, 0, 1))
+    e_l, rad = eye_frame_base("l")
+    head_front = (co[:, 1] < e_l[1] + rad) & (np.abs(co[:, 0]) < 3.2 * rad)
+    tz = head_front * np.clip((co[:, 2] - (e_l[2] + 2.2 * rad)) / (1.5 * rad), 0, 1) * (co[:, 2] < e_l[2] + 9 * rad)
+    r.update(lids=lids, lash=lash, under=under, tzone=np.maximum(tz, r["nose"]))
+    return r
+
+
 def skin_texture(skin_hex, out, size=1024, lips=True, brows=True, brow_hex=None, scalp=None, scalp_hex=None,
-                 brow_shape=None):
-    """Flat skin tone with soft lips and brows painted on the MakeHuman body UV layout.
+                 brow_shape=None, detail=True, ao=None):
+    """Skin tone with soft lips and brows painted on the MakeHuman body UV layout.
 
     scalp: optional per base-vertex weight (hair.coverage_mask) tinted towards scalp_hex, with a speckled
-    edge, so the hairline reads as hair growing out of the skin rather than a layer laid on top."""
+    edge, so the hairline reads as hair growing out of the skin rather than a layer laid on top.
+    detail: natural tone variation (warmer cheeks and nose, darker lids and lash lines, a little shadow
+    under the eyes) so the face reads at any skin tone instead of as one flat paint.
+    ao: optional per base-vertex ambient occlusion (1 = open) baked into the folds of the face and body,
+    which keeps the face's shape readable on dark skin and in viewers without AO."""
     from .blender_free import hex_rgb
     tone = np.array(hex_rgb(skin_hex))
     img = np.ones((size, size, 3), dtype=np.float32) * tone
@@ -129,8 +161,22 @@ def skin_texture(skin_hex, out, size=1024, lips=True, brows=True, brow_hex=None,
     from .fabric import _noise
     rng = np.random.default_rng(3)
     blot = _noise((size, size), size / 40, rng) * 0.5 + _noise((size, size), size / 140, rng) * 0.5
-    img = img * (1 + 0.035 * blot[..., None] * np.array([0.6, 1.0, 1.1]))
+    img = img * (1 + (0.05 if detail else 0.035) * blot[..., None] * np.array([0.6, 1.0, 1.1]))
     tv, tuv = _body_uv_tris()
+    if detail:
+        reg = face_regions()
+
+        def paint(m, mul, blur=2):
+            w = _blur(raster_scalar(tuv, m[tv], size), blur)[..., None]
+            return img * (1 + w * (np.array(mul) - 1))
+        img = paint(reg["cheeks"], (1.06, 0.95, 0.94), 4)      # blood flow: warmer, redder cheeks
+        img = paint(reg["nose"], (1.05, 0.95, 0.95), 3)        # and nose
+        img = paint(reg["lids"], (0.86, 0.83, 0.84), 2)        # darker upper lids / sockets
+        img = paint(reg["under"], (0.94, 0.92, 0.95), 3)       # a hint of shadow under the eyes
+        img = paint(reg["lash"], (0.55, 0.5, 0.5), 1)          # lash line: frames the eye
+    if ao is not None:
+        a = _blur(raster_scalar(tuv, (1 - np.clip(ao, 0, 1))[tv], size), 2)[..., None]
+        img = img * (1 - 0.45 * a)
     if lips:
         m = _target_mask(["mouth/mouth-upperlip-volume-incr", "mouth/mouth-lowerlip-volume-incr"])
         m = np.clip((m - 0.35) / 0.4, 0, 1)
@@ -156,6 +202,22 @@ def skin_texture(skin_hex, out, size=1024, lips=True, brows=True, brow_hex=None,
     return out
 
 
+def skin_roughness(base, out, size=1024):
+    """Roughness map for the skin: the T-zone and nose are a little oilier (shinier), lips glossier,
+    cheeks and the rest of the body drier. Breaks up the even plastic sheen of one roughness value."""
+    reg = face_regions()
+    tv, tuv = _body_uv_tris()
+    r = np.full((size, size), base + 0.04, np.float32)
+    tz = _blur(raster_scalar(tuv, reg["tzone"][tv], size), 4)
+    r -= 0.14 * tz
+    m = _target_mask(["mouth/mouth-upperlip-volume-incr", "mouth/mouth-lowerlip-volume-incr"])
+    lip = _blur(raster_scalar(tuv, np.clip((m - 0.35) / 0.4, 0, 1)[tv], size), 2)
+    r -= 0.2 * lip
+    g = (np.clip(r, 0.05, 1) * 255).astype(np.uint8)
+    Image.fromarray(np.stack([g, g, g], -1)).save(out)  # glTF reads roughness from G
+    return out
+
+
 def skin_detail(out_prefix, size=2048, seed=5):
     """Pore/micro-wrinkle normal map for the body UV layout. Fine surface detail breaks up specular
     highlights, which is most of what makes bare skin look like plastic."""
@@ -164,7 +226,7 @@ def skin_detail(out_prefix, size=2048, seed=5):
     pores = -np.clip(_noise((size, size), 1.2, rng), 0.6, None)  # small pits
     micro = _noise((size, size), 3.0, rng, aniso=(0.4, 1.6)) * 0.35
     h = pores + micro
-    n = normal_from_height(h.astype(np.float32), 0.06)
+    n = normal_from_height(h.astype(np.float32), 0.09)
     n_path = out_prefix + "_normal.jpg"
     Image.fromarray(((n * 0.5 + 0.5) * 255).clip(0, 255).astype(np.uint8)).save(n_path, quality=94)
     return n_path

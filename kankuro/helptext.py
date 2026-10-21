@@ -100,8 +100,12 @@ sections: {catalog_sections}""",
   kankuro skin --color "#c68e6b" --brow-color dark_brown
   kankuro skin --texture ./skin_painted.png
   kankuro skin --texture ""                       # remove the texture
+  kankuro skin --detail false                     # flat tone: no cheek/lid variation, cavity shading or oily T-zone
 skin colour names: {skin_colors}""",
         args={"color": "skin tone: #RRGGBB or a skin colour name",
+              "detail": "true (default): natural tone variation (warmer cheeks and nose, darker lids and lash "
+                        "lines), baked cavity shading and a T-zone roughness map, with shading tuned to the "
+                        "tone; false: one flat tone",
               "texture": "PNG on the body UV template; \"\" removes it",
               "brow_color": "eyebrow colour: #RRGGBB or a hair colour name"}),
     "face": dict(

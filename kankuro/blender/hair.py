@@ -108,6 +108,8 @@ def _cap(res, body_obj, style, name):
     bm = bmesh.new()
     bm.from_mesh(obj.data)
     garments._smooth_boundary(bm, iterations=10)
+    # the cut follows the scalp's mesh edges; low-pass the hairline so it's a clean curve, not a zigzag
+    garments._smooth_loops(bm, harmonics=14, rings=3)
     bm.to_mesh(obj.data)
     bm.free()
     # Smooth away ears/face detail so hair reads as one mass, then sit it on the scalp
