@@ -126,14 +126,17 @@ def pose_to_tpose(arm):
 
 def apply_pose_as_rest(arm, meshes):
     """Bake the current pose into the meshes and make it the armature's rest pose."""
-    from .util import get_coords, set_coords
-    baked = [(m, get_coords(m, evaluated=True)) for m in meshes]
+    from .util import set_coords
+    baked = [(m, _posed_coords(m)) for m in meshes]
     heads = {pb.name: pb.head.copy() for pb in arm.pose.bones}
     tails = {pb.name: pb.tail.copy() for pb in arm.pose.bones}
     for pb in arm.pose.bones:
         pb.matrix_basis = Matrix.Identity(4)
-    for m, co in baked:
+    for m, (co, keys) in baked:
         set_coords(m, co)
+        for kb, kco in keys:
+            kb.data.foreach_set("co", kco.ravel())
+        m.data.update()
     bpy.context.view_layer.objects.active = arm
     bpy.ops.object.mode_set(mode="EDIT")
     for eb in arm.data.edit_bones:
@@ -142,6 +145,37 @@ def apply_pose_as_rest(arm, meshes):
     match_m2m_orientation(arm.data.edit_bones)
     bpy.ops.object.mode_set(mode="OBJECT")
     bpy.context.view_layer.update()
+
+
+def _posed_coords(m):
+    """Deformed vertex positions of m, plus each shape key's deformed positions (shape keys such as
+    facial blendshapes survive the rest-pose change)."""
+    from .util import get_coords
+    sk = m.data.shape_keys
+    if not sk:
+        return get_coords(m, evaluated=True), []
+    saved = m.show_only_shape_key, m.active_shape_key_index
+    m.show_only_shape_key = True
+    keys = []
+    for i, kb in enumerate(sk.key_blocks):
+        m.active_shape_key_index = i
+        bpy.context.view_layer.update()
+        keys.append((kb, get_coords(m, evaluated=True)))
+    m.show_only_shape_key, m.active_shape_key_index = saved
+    bpy.context.view_layer.update()
+    return keys[0][1], keys
+
+
+def bake_evaluated(m):
+    """Write m's modifier result (e.g. its armature deformation) into its vertices and shape keys."""
+    from .util import set_coords
+    co, keys = _posed_coords(m)
+    if len(co) != len(m.data.vertices):
+        return False
+    for kb, kco in keys:
+        kb.data.foreach_set("co", kco.ravel())
+    set_coords(m, co)
+    return True
 
 
 def match_m2m_orientation(edit_bones):

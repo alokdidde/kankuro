@@ -411,6 +411,7 @@ def cmd_autorig(a):
     if not os.path.isfile(src):
         raise CliError("missing_file", f"File not found: {src}")
     out = os.path.abspath(a.out)
+    os.makedirs(os.path.dirname(out), exist_ok=True)
     log = os.path.join(os.path.dirname(out), "autorig.log")
     with util.quiet(log):
         r = autorig.run(src, out, facing=a.facing, animations=_parse_list(a.animations),
@@ -456,7 +457,7 @@ SCHEMA = {
     "render [--views front,three_quarter,side,back] [--focus full|upper|head] [--animation CLIP --frame 0..1]": "preview PNGs",
     "animations": "list Mesh2Motion clips that can be baked into the GLB",
     "reference-body --out GLB [--with-rig]": "neutral body for authoring custom garments/hair",
-    "autorig <mesh> --out GLB [--facing auto|-y|+y] [--animations A,B] [--render DIR]": "rig any humanoid mesh to the Mesh2Motion skeleton",
+    "autorig <mesh> --out GLB [--facing auto|-y|+y|-x|+x] [--animations A,B] [--render DIR]": "rig any humanoid mesh to the Mesh2Motion skeleton",
     "validate <glb>": "check a GLB against the Mesh2Motion human standard",
     "schema": "this description",
 }
@@ -539,7 +540,7 @@ def parser():
     x = sp.add_parser("autorig")
     x.add_argument("mesh")
     x.add_argument("--out", required=True)
-    x.add_argument("--facing", default="auto", choices=["auto", "-y", "+y"])
+    x.add_argument("--facing", default="auto", choices=["auto", "-y", "+y", "-x", "+x"])
     x.add_argument("--animations")
     x.add_argument("--render")
     x.add_argument("--method", default="auto", choices=["auto", "heat", "proximity"])

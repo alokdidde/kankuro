@@ -113,6 +113,30 @@ class AutoRig(unittest.TestCase):
         v = cc("validate", out["glb"])
         self.assertTrue(v["valid"], v["checks"])
 
+    def test_autorig_awkward_input(self):
+        """A-pose, facing +X, centimetres, shape key, output folder that doesn't exist yet."""
+        tmp = tempfile.mkdtemp()
+        ref = os.path.join(tmp, "ref.glb")
+        cc("reference-body", "--out", ref, "--with-rig")
+        src = os.path.join(tmp, "variant.glb")
+        subprocess.run([sys.executable, os.path.join(ROOT, "tests", "make_autorig_variant.py"), ref, src],
+                       check=True, capture_output=True)
+        out = cc("autorig", src, "--out", os.path.join(tmp, "new", "dir", "rigged.glb"), "--animations", "Walk")
+        self.assertEqual(out["facing_detected"], "+x")
+        self.assertEqual(out["scaled_by"], 0.01)
+        self.assertIn("joints", out)
+        with open(src[:-4] + ".joints.json") as f:
+            truth = json.load(f)
+        H = out["height_m"]
+        for bone, p in truth.items():
+            got = out["joints"][bone]
+            err = sum((a - b) ** 2 for a, b in zip(got, p)) ** 0.5 * out["scaled_by"]
+            self.assertLess(err / H, 0.06, f"{bone}: {got} vs {p}")
+        v = cc("validate", out["glb"])
+        self.assertTrue(v["valid"], v["checks"])
+        self.assertTrue(any(m.get("extras", {}).get("targetNames") for m in glb_json(out["glb"])["meshes"]),
+                        "shape key lost")
+
 
 if __name__ == "__main__":
     unittest.main()

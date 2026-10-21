@@ -92,10 +92,31 @@ body to current body), skinned from nearby body weights, and pushed out of the s
 ccreator autorig model.glb --out model_rigged.glb --animations Idle_A --render ./check
 ```
 
-The model must be upright and humanoid, in T- or A-pose with legs apart. Facing is auto-detected from
-the feet. Skinning uses Blender bone-heat. If heat can't solve the mesh, it tries a voxel-remeshed proxy,
-then distance weights, and reports which method it used. The result is converted to the Mesh2Motion
-T-pose rest.
+Any upright humanoid works: GLB/glTF/OBJ/FBX, T-pose or A-pose (arms down to ~70 degrees), with
+clothes, hair and accessories, realistic or cartoon proportions (big heads, short legs). Legs must be
+separate below the knees; a long skirt or robe that hides the crotch fails with `autorig_failed`.
+
+- **Input clean-up.** Meshes are joined, any rig and clips in the file are dropped, and shape keys
+  (blendshapes) are kept. If a rigged file's rest pose is broken (lying down, or parts scattered
+  because only the skin assembles them), the pose the file shows is used instead.
+- **Orientation and units.** Facing is detected from the feet (which way the toes point) and turned
+  to face -Y; models facing sideways are handled too (`--facing -y|+y|-x|+x` overrides). A model
+  taller than 20 units is taken as centimetres and scaled to metres (`scaled_by`).
+- **Joints.** Landmarks are measured on the mesh: crotch (where the centre line between the legs
+  becomes torso depth, so touching thighs or knees are fine), neck (narrowest point under the head),
+  torso width, hand tips (furthest surface points from the chest, below the neck) and leg centre
+  lines. The Mesh2Motion joints of the template body are mapped onto them. `joints` in the output
+  gives every bone head in the input file's own coordinates, for checking.
+- **Skinning.** Blender bone-heat on the mesh. Where heat can't solve it (glTF seams, open shells,
+  many parts), heat runs on a welded copy, then on voxel remeshes from fine to coarse, and the
+  weights are copied back by nearest surface point. Distance weights are the last resort. `skinning`
+  reports what was tried and used.
+- **Output.** Mesh2Motion T-pose rest with exact bone orientations, so every Mesh2Motion clip plays
+  unchanged; `validate` checks it.
+
+Check the renders: limbs should bend at the joints and the walk should look like the reference
+body's. Tested on 33 Mesh2Motion sample characters (joint error against their hand-placed skeletons
+is about 3% of height on average) plus Mixamo, VRM and glTF sample models.
 
 ## Commands
 

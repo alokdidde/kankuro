@@ -72,8 +72,12 @@ def conform_imported(obj, ref_coords, res, bone_filter=None, k=24):
     util.set_weight_matrix(obj, W, res.bones)
 
 
-def import_mesh_file(path, name):
-    """Import a .glb/.gltf/.obj/.fbx and join its meshes into one object (armatures are discarded)."""
+def import_mesh_file(path, name, any_pose=False):
+    """Import a .glb/.gltf/.obj/.fbx and join its meshes into one object (armatures are discarded).
+
+    Skinned meshes keep their bind (rest) shape. With any_pose, a rest shape that is visibly broken
+    (lying down, or parts scattered because the file only assembles them through the skin) is
+    replaced by the pose the file shows."""
     before = set(bpy.data.objects)
     ext = os.path.splitext(path)[1].lower()
     if ext in (".glb", ".gltf"):
@@ -94,6 +98,8 @@ def import_mesh_file(path, name):
         meshes = skinned
     if not meshes:
         raise CliError("no_mesh", f"No mesh found in {path}")
+    if any_pose and any(o.type == "ARMATURE" for o in new):
+        _bake_shown_pose(new, meshes)
     for m in meshes:
         mw = m.matrix_world.copy()
         m.parent = None
@@ -111,6 +117,88 @@ def import_mesh_file(path, name):
     obj = meshes[0]
     obj.name = name
     return obj
+
+
+def _surface_samples(ms, n=40000):
+    """World-space points spread over the evaluated surfaces of ms."""
+    dg = bpy.context.evaluated_depsgraph_get()
+    pts = []
+    for m in ms:
+        ev = m.evaluated_get(dg)
+        me = ev.to_mesh()
+        me.calc_loop_triangles()
+        co = np.empty(len(me.vertices) * 3)
+        me.vertices.foreach_get("co", co)
+        co = co.reshape(-1, 3) @ np.array(m.matrix_world)[:3, :3].T + np.array(m.matrix_world)[:3, 3]
+        tri = np.empty(len(me.loop_triangles) * 3, dtype=np.int64)
+        me.loop_triangles.foreach_get("vertices", tri)
+        ev.to_mesh_clear()
+        if len(tri):
+            pts.append((co, tri.reshape(-1, 3)))
+    co = np.concatenate([c for c, _ in pts])
+    off = np.cumsum([0] + [len(c) for c, _ in pts[:-1]])
+    tri = np.concatenate([t + o for (_, t), o in zip(pts, off)])
+    a, b, c = co[tri[:, 0]], co[tri[:, 1]], co[tri[:, 2]]
+    area = np.linalg.norm(np.cross(b - a, c - a), axis=1)
+    rng = np.random.default_rng(0)
+    idx = rng.choice(len(tri), size=n, p=area / area.sum())
+    r1, r2 = np.sqrt(rng.random(n)), rng.random(n)
+    return a[idx] * (1 - r1)[:, None] + b[idx] * (r1 * (1 - r2))[:, None] + c[idx] * (r1 * r2)[:, None]
+
+
+def _parts(pts, cells=40):
+    """Surface shares of the 26-connected blobs of a coarse voxel grid, biggest first (a body in one
+    piece is one blob; parts that only the skin brings together fall apart into several)."""
+    lo = pts.min(0)
+    size = (pts.max(0) - lo).max() / cells
+    vox = np.floor((pts - lo) / size).astype(int)
+    keys, counts = np.unique(vox, axis=0, return_counts=True)
+    index = {tuple(k): i for i, k in enumerate(keys)}
+    seen = np.zeros(len(keys), bool)
+    blobs = []
+    offsets = [(dx, dy, dz) for dx in (-1, 0, 1) for dy in (-1, 0, 1) for dz in (-1, 0, 1)]
+    for s in range(len(keys)):
+        if seen[s]:
+            continue
+        seen[s] = True
+        stack, total = [s], 0
+        while stack:
+            i = stack.pop()
+            total += counts[i]
+            x, y, z = keys[i]
+            for dx, dy, dz in offsets:
+                j = index.get((x + dx, y + dy, z + dz))
+                if j is not None and not seen[j]:
+                    seen[j] = True
+                    stack.append(j)
+        blobs.append(total / len(pts))
+    return sorted(blobs, reverse=True)
+
+
+def _looks_standing(ms):
+    pts = _surface_samples(ms)
+    ext = pts.max(0) - pts.min(0)
+    return ext[2] > 0.4 * max(ext[0], ext[1]) and ext[2] > ext[1] and sum(b > 0.02 for b in _parts(pts)) == 1
+
+
+def _bake_shown_pose(new, meshes):
+    arms = [o for o in new if o.type == "ARMATURE"]
+
+    for a in arms:
+        a.data.pose_position = "REST"
+    bpy.context.view_layer.update()
+    if _looks_standing(meshes):
+        return
+    for a in arms:
+        a.data.pose_position = "POSE"
+    bpy.context.view_layer.update()
+    if not _looks_standing(meshes):
+        for a in arms:
+            a.data.pose_position = "REST"
+        return
+    for m in meshes:
+        if any(md.type == "ARMATURE" and md.object for md in m.modifiers):
+            rig.bake_evaluated(m)
 
 
 _REF = {}
