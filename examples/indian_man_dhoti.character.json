@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "name": "raju",
+  "body": {
+    "preset": "male",
+    "macros": {
+      "gender": 1.0,
+      "muscle": 0.6,
+      "weight": 0.5,
+      "age": 0.55,
+      "caucasian": 0.5,
+      "asian": 0.2,
+      "african": 0.3
+    },
+    "morphs": {},
+    "height_cm": 172
+  },
+  "skin": {
+    "color": "#9a6340",
+    "texture": null,
+    "roughness": 0.6,
+    "lips": true,
+    "brows": true,
+    "brow_color": "#140d09"
+  },
+  "eyes": {
+    "iris_color": "#2e1c10"
+  },
+  "hair": {
+    "style": "buzz",
+    "color": "#120c09"
+  },
+  "garments": [
+    {
+      "id": "dhoti",
+      "type": "dhoti",
+      "color": "#efe9da",
+      "texture": "assets/textures/dhoti_cream.png",
+      "height": "assets/textures/dhoti_cream_height.png"
+    },
+    {
+      "id": "turban",
+      "type": "turban",
+      "color": "#c8401e"
+    }
+  ],
+  "export": {
+    "animations": [],
+    "hide_body_under_clothes": true,
+    "texture_size": 2048
+  }
+}

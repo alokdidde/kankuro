@@ -347,10 +347,51 @@ def skin_from_body(obj, body_obj, bones, smooth_iters=10, smooth_factor=0.5):
     util.set_weight_matrix(obj, W, bones)
 
 
+def loosen_legs(obj, res, amount):
+    """Draped legs (dhoti): push each trouser leg out from its bone axis, from nothing at the hips to
+    `amount` at the knee and below, mostly to the front, back and outside so the legs never meet.
+    Leg hems are then levelled so they hang straight."""
+    bones = res.arm.data.bones
+    co = util.get_coords(obj)
+    z_hip = bones["thigh_l"].head_local.z
+    z_knee = bones["calf_l"].head_local.z
+    for side in ("l", "r"):
+        chain = [bones[f"thigh_{side}"].head_local, bones[f"calf_{side}"].head_local, bones[f"foot_{side}"].head_local]
+        zs = np.array([p.z for p in chain])[::-1]
+        ax = np.interp(co[:, 2], zs, np.array([p.x for p in chain])[::-1])
+        ay = np.interp(co[:, 2], zs, np.array([p.y for p in chain])[::-1])
+        sx = np.sign(chain[0].x)
+        sel = (co[:, 0] * sx > 0.02) & (co[:, 2] < z_hip + 0.05)
+        d = co[:, :2] - np.stack([ax, ay], 1)
+        r = np.maximum(np.linalg.norm(d, axis=1), 1e-6)
+        u = d / r[:, None]
+        k = np.clip((z_hip + 0.05 - co[:, 2]) / (z_hip + 0.05 - z_knee), 0, 1)
+        k = k * k * (3 - 2 * k)
+        outward = (1 + u[:, 0] * sx) / 2  # 1 on the outside of the leg, 0 on the inside
+        push = amount * k * (0.35 + 0.65 * outward)
+        new = co[:, :2] + u * push[:, None]
+        new[:, 0] = np.where(sx > 0, np.maximum(new[:, 0], 0.012), np.minimum(new[:, 0], -0.012))
+        co[sel, :2] = new[sel]
+    util.set_coords(obj, co)
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    for loop in _boundary_loops(bm):
+        z = np.array([v.co.z for v in loop])
+        if z.mean() < z_knee:
+            _fade_into({v: Vector((0, 0, z.mean() - v.co.z)) for v in loop}, loop, 3)
+    bm.to_mesh(obj.data)
+    bm.free()
+
+
 def make(res, ref_res, body_obj, gid, gtype, layer_rank=0, worn=None):
     """Build a standard garment on `res`'s body. The face cut and the UV layout come from the neutral
     reference body (`ref_res`), so one texture fits the garment on every body shape."""
     gdef = catalog.GARMENTS[gtype]
+    if "turban" in gdef:
+        from . import headwear
+        obj, uvinfo = headwear.turban(res, body_obj, gid, gdef)
+        obj["garment_type"] = gtype
+        return obj, uvinfo
     group = gdef.get("source_group", "helper-tights")
     faces, _ = morph.faces_of_group(group)
     verts = np.unique(np.concatenate([np.asarray(f) for f in faces]))
@@ -373,6 +414,8 @@ def make(res, ref_res, body_obj, gid, gtype, layer_rank=0, worn=None):
     offset_along_normals(obj, gap)
     bvh = body_bvh(body_obj)
     conform(obj, bvh, gap * 0.8)
+    if gdef.get("loose"):
+        loosen_legs(obj, res, gdef["loose"])
     if worn is not None:
         conform_over(obj, bvh, worn, 0.006)
     if gdef.get("sole"):

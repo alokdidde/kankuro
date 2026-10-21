@@ -74,4 +74,17 @@ GARMENTS = {
         "regions": {"hand_*": [0, 1], "lowerarm_*": [0.88, 1], "thumb_*": [0, 1], "index_*": [0, 1],
                     "middle_*": [0, 1], "ring_*": [0, 1], "pinky_*": [0, 1]},
     },
+    "dhoti": {
+        "fabric": "canvas", "desc": "Draped dhoti: loose woven-cotton legs from the waist to mid-calf",
+        "slot": "bottom", "layer": 2, "offset": 0.008, "loose": 0.06,
+        "regions": {"torso": [0, 0.17], "thigh_*": [0, 1], "calf_*": [0, 0.7]},
+    },
+    "turban": {
+        "fabric": "canvas", "desc": "Wrapped turban (pagdi) with layered folds crossing over the forehead",
+        "slot": "head", "layer": 4, "offset": 0.006,
+        # line: bottom edge on the head (front, side, back; 0 = skull base, 1 = crown); bulk: how far the
+        # cloth swells out; crown: extra height; band/rise/depth: wrap width, climb to the front, ridge height
+        "turban": {"line": [0.6, 0.5, 0.2], "bulk": 0.03, "crown": 0.045, "band": 0.03, "rise": 0.07,
+                   "depth": 0.009},
+    },
 }
