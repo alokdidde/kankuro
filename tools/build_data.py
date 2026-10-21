@@ -1,7 +1,8 @@
 """Compile third-party CC0 source assets into the compact files under ccreator/data.
 
 Sources (both CC0):
-  * MakeHuman  https://github.com/makehumancommunity/makehuman  (base mesh, morph targets, weights, eyes)
+  * MakeHuman  https://github.com/makehumancommunity/makehuman  (base mesh, morph targets, weights, eyes,
+    face pose units and expression targets)
   * Mesh2Motion https://github.com/scottpetrovic/mesh2motion-app (human rig, animations)
 
 Usage:
@@ -210,16 +211,116 @@ def build_eyes(mh):
     shutil.copy(os.path.join(mh, "modifiers", "modeling_modifiers.json"), os.path.join(DATA, "modeling_modifiers.json"))
 
 
+FACE_SCULPT_ETHNICITIES = ("african", "asian", "caucasian")
+
+
+def _parse_bvh(path):
+    """Joint names, parent indices and per-frame per-joint 3x3 rotations of a BVH file."""
+    names, parents, chans, stack, pending = [], [], [], [], None
+    lines = open(path).read().splitlines()
+    i = 0
+    while not lines[i].startswith("MOTION"):
+        tok = lines[i].split()
+        if tok and tok[0] in ("ROOT", "JOINT"):
+            names.append(tok[1])
+            parents.append(stack[-1] if stack else -1)
+            pending = len(names) - 1
+        elif tok and tok[0] == "End":
+            pending = None
+        elif tok and tok[0] == "{":
+            stack.append(pending)
+        elif tok and tok[0] == "}":
+            stack.pop()
+        elif tok and tok[0] == "CHANNELS":
+            chans.append(tok[2:])
+        i += 1
+    frames = np.array([[float(x) for x in l.split()] for l in lines[i + 3:] if l.strip()])
+
+    def rot(axis, deg):
+        a = np.radians(deg)
+        c, s = np.cos(a), np.sin(a)
+        return {"X": np.array([[1, 0, 0], [0, c, -s], [0, s, c]]),
+                "Y": np.array([[c, 0, s], [0, 1, 0], [-s, 0, c]]),
+                "Z": np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]])}[axis]
+
+    R = np.tile(np.eye(3), (len(frames), len(names), 1, 1))
+    for f, row in enumerate(frames):
+        k = 0
+        for j, ch in enumerate(chans):
+            for c in ch:
+                if c.endswith("rotation") and abs(row[k]) > 1e-4:
+                    R[f, j] = R[f, j] @ rot(c[0], row[k])
+                k += 1
+    return names, parents, R
+
+
+def build_face(mh):
+    """Facial expression data (CC0): MakeHuman's 59 face pose units and its sculpted expression units.
+
+    The pose-unit BVH is Z-up (MakeHuman auto-detects that), so its rotations already use Blender axes.
+    Each rotation is world-aligned about the bone head and chains to the parent (MakeHuman's setPose).
+    """
+    names, parents, R = _parse_bvh(os.path.join(mh, "poseunits", "face-poseunits.bvh"))
+    units = json.load(open(os.path.join(mh, "poseunits", "face-poseunits.json")))["framemapping"]
+    skel = json.load(open(os.path.join(mh, "rigs", "default.mhskel")))
+    w = json.load(open(os.path.join(mh, "rigs", "default_weights.mhw")))["weights"]
+    # keep only joints that some unit rotates, plus their ancestors
+    moving = np.abs(R - np.eye(3)).max(axis=(0, 2, 3)) > 1e-6
+    keep = set()
+    for j in np.nonzero(moving)[0]:
+        while j >= 0 and j not in keep:
+            keep.add(j)
+            j = parents[j]
+    keep = sorted(keep)
+    remap = {j: i for i, j in enumerate(keep)}
+    out = {
+        "unit_names": np.array(units),
+        "bone_names": np.array([names[j] for j in keep]),
+        "bone_parents": np.array([remap.get(parents[j], -1) for j in keep]),
+        "bone_head_joint": np.array([skel["bones"][names[j]]["head"] for j in keep]),
+        "unit_rot": R[:, keep].astype(np.float32),
+    }
+    nverts = len(np.load(os.path.join(DATA, "base_mesh.npz"))["coords"])
+    total = np.zeros(nverts)
+    for b, pairs in w.items():
+        for vi, wt in pairs:
+            total[vi] += wt
+    out["weight_total"] = total.astype(np.float32)
+    for b in out["bone_names"]:
+        pairs = w.get(str(b), [])
+        out["w|" + b + "|i"] = np.array([p[0] for p in pairs], dtype=np.int32)
+        out["w|" + b + "|w"] = np.array([p[1] for p in pairs], dtype=np.float32)
+    sculpt = []
+    for eth in FACE_SCULPT_ETHNICITIES:
+        d = os.path.join(mh, "targets", "expression", "units", eth)
+        for fn in sorted(os.listdir(d)):
+            if not fn.endswith(".target"):
+                continue
+            rows = [l.split() for l in open(os.path.join(d, fn)) if l.strip() and not l.startswith("#")]
+            key = f"s|{eth}|{fn[:-7]}"
+            out[key + "|i"] = np.array([int(r[0]) for r in rows], dtype=np.int32)
+            out[key + "|d"] = mh_to_bl([[float(x) for x in r[1:4]] for r in rows]).astype(np.float32)
+            if eth == FACE_SCULPT_ETHNICITIES[0]:
+                sculpt.append(fn[:-7])
+    out["sculpt_names"] = np.array(sculpt)
+    np.savez_compressed(os.path.join(DATA, "face_units.npz"), **out)
+    print("face:", len(units), "pose units over", len(keep), "bones;", len(sculpt), "sculpted units")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--makehuman", required=True, help="path to makehuman/makehuman/data")
-    ap.add_argument("--mesh2motion", required=True, help="path to mesh2motion-app checkout")
+    ap.add_argument("--mesh2motion", help="path to mesh2motion-app checkout")
+    ap.add_argument("--only", choices=["face"], help="rebuild just one data file")
     a = ap.parse_args()
     os.makedirs(DATA, exist_ok=True)
+    if a.only == "face":
+        return build_face(a.makehuman)
     n = build_base(a.makehuman)
     build_targets(a.makehuman, n)
     build_skeleton(a.makehuman, n)
     build_eyes(a.makehuman)
+    build_face(a.makehuman)
     build_m2m(a.mesh2motion)
 
 

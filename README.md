@@ -13,6 +13,9 @@ carry a `code` and a `hint`, the whole character lives in one inspectable `chara
 * **Clothes:** 12 standard garments cut from the body and conformed to it, auto-skinned and layered,
   with skin hidden underneath. Each one has a **front/back UV template** that an image model can repaint.
   The repainted PNG is passed back in with `--texture`.
+* **Facial expressions:** every build carries the **52 ARKit blendshapes** (`jawOpen`, `eyeBlinkLeft`,
+  `mouthSmileRight`, ...) as glTF morph targets, ready for face capture (Live Link Face, ARKit, MediaPipe)
+  or lip-sync tools.
 * **Auto-rig:** rigs any humanoid mesh (T- or A-pose, dressed or not) to the Mesh2Motion skeleton.
 * **Export:** GLB, optionally with Mesh2Motion animation clips baked in.
 
@@ -123,6 +126,30 @@ Check the renders: limbs should bend at the joints and the walk should look like
 body's. Tested on 33 Mesh2Motion sample characters (joint error against their hand-placed skeletons
 is about 3% of height on average) plus Mixamo, VRM and glTF sample models.
 
+## Facial expressions (ARKit 52)
+
+`build` adds the 52 ARKit blendshapes with their standard names to `Body`, `Eyes`, `LowerTeeth` and
+`Tongue`. Engines drive them by name, so face-capture data or a lip-sync tool plays on the character
+directly. They don't touch the skeleton, so the Mesh2Motion rig and its clips are unchanged.
+
+```bash
+ccreator render --focus head --expression smile                  # presets: smile laugh surprise angry sad blink kiss
+ccreator render --focus head --expression jawOpen=0.6,eyeBlinkLeft=1,smile
+ccreator catalog expressions                                     # the 52 names and the presets
+ccreator set face.blendshapes=none                               # leave them out (smaller GLB)
+```
+
+The shapes are generated for each character from MakeHuman's CC0 face data, so they fit any body and face
+shape:
+
+* 59 **face pose units** on MakeHuman's face skeleton drive the jaw, eye look, lips, cheeks and tongue.
+* Hand-sculpted **expression targets** cover blink, squint, smile, frown, pucker, brows and nose. They are
+  blended by the character's ethnicity sliders.
+
+Left and right are the character's own, as in ARKit. They add about 5 s to a build and about 3 MB to the
+GLB. `validate` checks that all 52 names are present. Teeth and tongue are MakeHuman's simple helper
+shapes, so they look plain in close-ups.
+
 ## Commands
 
 Run `ccreator schema` for the machine-readable list. In brief:
@@ -131,14 +158,14 @@ Run `ccreator schema` for the machine-readable list. In brief:
 |---|---|
 | `init <dir> [--preset]` | new project (`catalog presets` lists presets) |
 | `show` | spec + last build manifest |
-| `set path=value ...` | `body.macros.<slider>`, `body.morphs.<modifier>`, `body.height_cm`, `skin.*`, `eyes.iris_color`, `name` |
+| `set path=value ...` | `body.macros.<slider>`, `body.morphs.<modifier>`, `body.height_cm`, `skin.*`, `eyes.iris_color`, `face.blendshapes` (`arkit52`/`none`), `name` |
 | `catalog [section]` | presets, body sliders, hair styles, garment types |
 | `morphs [--group] [--search]` | detailed morph modifiers (nose, jaw, torso, limbs, ...) |
 | `skin [--color] [--texture] [--brow-color]` | skin tone or painted skin texture |
 | `hair set/import/remove` | hair |
 | `garment add/import/set/remove` | clothes; `--texture`, `--fabric`, `--height`, `--normal` for surface; adding a garment replaces any other in the same slot unless `--keep-slot` |
 | `template [ids|types|body|all]` | UV template + mask PNGs |
-| `render [--views] [--focus] [--animation --frame]` | preview PNGs + a combined sheet |
+| `render [--views] [--focus] [--animation --frame] [--expression]` | preview PNGs + a combined sheet |
 | `build [--animations A,B|all] [--render]` | export the GLB |
 | `animations` | Mesh2Motion clips available |
 | `reference-body --out` | neutral body for authoring assets |
@@ -161,6 +188,7 @@ rest. Bones follow Mesh2Motion `rig-human` (`root`, `pelvis`, `spine_01..03`, `n
 ccreator/cli.py            commands, JSON I/O
 ccreator/spec.py           character.json schema, presets, validation
 ccreator/morph.py          MakeHuman macro/detail morphs (numpy)
+ccreator/face.py           ARKit 52 facial blendshapes from MakeHuman face units (numpy)
 ccreator/catalog.py        hair styles and garment definitions
 ccreator/textures.py       skin map, UV templates
 ccreator/fabric.py         fabric relief: weave/stitch/fold height -> normal map, albedo bake
@@ -171,6 +199,7 @@ tests/test_cli.py          end-to-end tests (python -m unittest discover tests)
 
 ## Credits and licences
 
-* MakeHuman base mesh, morph targets, skin weights and eyes: **CC0** (makehumancommunity/makehuman).
+* MakeHuman base mesh, morph targets, skin weights, eyes, face pose units and expression targets: **CC0**
+  (makehumancommunity/makehuman).
 * Mesh2Motion human rig and animation clips: **CC0** (scottpetrovic/mesh2motion-app).
 * `tools/build_data.py` recompiles `ccreator/data` from those repositories.

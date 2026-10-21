@@ -36,6 +36,7 @@ def default_spec(name="character", preset="neutral"):
         "skin": {"color": "#d8a383", "texture": None, "roughness": 0.6,
                  "lips": True, "brows": True, "brow_color": None},
         "eyes": {"iris_color": None},
+        "face": {"blendshapes": "arkit52"},
         "hair": None,
         "garments": [],
         "export": {"animations": [], "hide_body_under_clothes": True, "texture_size": 2048},
@@ -89,6 +90,9 @@ def validate(spec, project):
     color(spec["eyes"].get("iris_color"), "eyes.iris_color")
     if spec["skin"].get("texture"):
         _check_file(project, spec["skin"]["texture"], "skin.texture")
+    shapes = spec.get("face", {}).get("blendshapes", "arkit52")
+    if shapes not in ("arkit52", "none"):
+        raise CliError("bad_value", f"Unknown face.blendshapes '{shapes}'", hint="Valid: arkit52, none")
     hair = spec.get("hair")
     if hair:
         if hair.get("source"):
@@ -166,6 +170,7 @@ SETTABLE = {
     "skin.brows": bool,
     "skin.brow_color": (str, type(None)),
     "eyes.iris_color": (str, type(None)),
+    "face.blendshapes": str,
     "export.hide_body_under_clothes": bool,
     "export.texture_size": int,
 }
@@ -212,7 +217,7 @@ def set_path(spec, path, value):
         return spec
     node = spec
     for p in parts[:-1]:
-        node = node[p]
+        node = node.setdefault(p, {})
     if path.endswith("color") and value is not None:
         value = color(value, path)
     node[parts[-1]] = value

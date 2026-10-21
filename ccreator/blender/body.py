@@ -6,7 +6,7 @@ import bpy
 import numpy as np
 from mathutils import kdtree
 
-from .. import morph
+from .. import face, morph
 from . import rig, util
 
 DATA = rig.DATA
@@ -52,14 +52,15 @@ def _complete_weights(W, co):
 class BodyResult:
     """Everything later stages need: the T-posed armature, T-posed coords of every base vertex, weights."""
 
-    def __init__(self, arm, coords, W):
+    def __init__(self, arm, coords, W, keys=None):
         self.arm = arm
         self.coords = coords
         self.W = W
         self.bones = rig.deform_bone_names()
+        self.keys = keys or {}  # facial blendshape name -> T-posed coords of every base vertex
 
 
-def build(macros=None, modifiers=None, height_cm=None):
+def build(macros=None, modifiers=None, height_cm=None, face_keys=()):
     co = morph.morphed_coords(macros, modifiers)
     body = group_verts("body")
     co[:, 2] -= co[body, 2].min()
@@ -77,14 +78,37 @@ def build(macros=None, modifiers=None, height_cm=None):
     tmp = util.make_mesh("_full", co, faces)
     names = rig.deform_bone_names()
     util.set_weight_matrix(tmp, W, names, max_influences=None, threshold=1e-4)
+    if face_keys:
+        # facial blendshapes ride the T-pose conversion as shape keys (rig._posed_coords bakes them)
+        tmp.shape_key_add(name="Basis")
+        for name, d in face.deltas(co, list(face_keys), macros).items():
+            tmp.shape_key_add(name=name, from_mix=False).data.foreach_set("co", (co + d).ravel())
 
     arm = rig.create_armature(rig.fit_from_makehuman(co))
     util.add_armature_modifier(tmp, arm)
     rig.pose_to_tpose(arm)
     rig.apply_pose_as_rest(arm, [tmp])
     coords_t = util.get_coords(tmp)
+    keys = {}
+    if face_keys:
+        for kb in tmp.data.shape_keys.key_blocks[1:]:
+            k = np.empty(len(coords_t) * 3)
+            kb.data.foreach_get("co", k)
+            keys[kb.name] = k.reshape(-1, 3)
     bpy.data.objects.remove(tmp, do_unlink=True)
-    return BodyResult(arm, coords_t, W)
+    return BodyResult(arm, coords_t, W, keys)
+
+
+def add_face_keys(obj, keys):
+    """Add shape keys {name: coords of obj's vertices}, skipping ones that don't move obj."""
+    moving = {k: v for k, v in keys.items() if np.abs(v - util.get_coords(obj)).max() > 1e-5}
+    if not moving:
+        return
+    obj.shape_key_add(name="Basis")
+    for name in keys:
+        kb = obj.shape_key_add(name=name, from_mix=False)
+        if name in moving:
+            kb.data.foreach_set("co", moving[name].ravel())
 
 
 def make_group_object(res, group, name, with_uv=True):
@@ -99,6 +123,7 @@ def make_group_object(res, group, name, with_uv=True):
     util.set_weight_matrix(obj, res.W[verts], res.bones)
     util.add_armature_modifier(obj, res.arm)
     obj["mh_verts"] = verts.tolist()
+    add_face_keys(obj, {k: v[verts] for k, v in res.keys.items()})
     return obj
 
 
@@ -169,7 +194,33 @@ def make_eyes(res):
     pts = pts[used]
     faces = [[remap[v] for v in f] for f in faces]
     obj = util.make_mesh("Eyes", pts, faces, uvs, fuvs)
+    add_face_keys(obj, _eye_keys(res, pts))
     vg = obj.vertex_groups.new(name="head")
     vg.add(list(range(len(pts))), 1.0, "REPLACE")
     util.add_armature_modifier(obj, res.arm)
     return obj
+
+
+def _rigid_fit(a, b):
+    """Rotation R and translation t with b ~ a @ R.T + t (Kabsch)."""
+    ca, cb = a.mean(0), b.mean(0)
+    U, _, Vt = np.linalg.svd((a - ca).T @ (b - cb))
+    D = np.diag([1, 1, np.sign(np.linalg.det(Vt.T @ U.T))])
+    R = Vt.T @ D @ U.T
+    return R, cb - ca @ R.T
+
+
+def _eye_keys(res, pts):
+    """Eyeballs turn rigidly with MakeHuman's eye helper meshes (eyeLook* shapes); other shapes leave them."""
+    if not res.keys:
+        return {}
+    sides = [(group_verts("helper-l-eye"), pts[:, 0] > 0), (group_verts("helper-r-eye"), pts[:, 0] <= 0)]
+    out = {}
+    for name, kco in res.keys.items():
+        p = pts.copy()
+        for hv, sel in sides:
+            if np.abs(kco[hv] - res.coords[hv]).max() > 1e-5:
+                R, t = _rigid_fit(res.coords[hv], kco[hv])
+                p[sel] = pts[sel] @ R.T + t
+        out[name] = p
+    return out

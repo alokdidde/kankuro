@@ -82,6 +82,9 @@ def cmd_catalog(a):
         "fabrics": {k: v["desc"] for k, v in __import__("ccreator.fabric", fromlist=["FABRICS"]).FABRICS.items()},
         "detail_morphs": f"{len(morph.modifier_catalog())} modifiers; list with `ccreator morphs`",
         "animations": "list with `ccreator animations`",
+        "expressions": {"blendshapes": __import__("ccreator.face", fromlist=["ARKIT_NAMES"]).ARKIT_NAMES,
+                        "presets": list(__import__("ccreator.face", fromlist=["PRESETS"]).PRESETS),
+                        "usage": "ccreator render --focus head --expression smile  (or jawOpen=0.6,eyeBlinkLeft=1)"},
     }
     if a.section:
         if a.section not in out:
@@ -279,8 +282,21 @@ def cmd_render(a):
     bad = [v for v in views if v not in render.VIEWS]
     if bad:
         raise CliError("bad_view", f"Unknown view(s): {', '.join(bad)}", hint=f"Valid: {', '.join(render.VIEWS)}")
+    expr = None
+    if a.expression:
+        from . import face
+        expr, bad_name = face.parse_expression(a.expression)
+        if expr is None:
+            raise CliError("bad_expression", f"Unknown expression or blendshape '{bad_name}'",
+                           hint=f"Presets: {', '.join(face.PRESETS)}; or ARKit names with weights, e.g. "
+                                "jawOpen=0.6,mouthSmileLeft=1 (list them with `ccreator catalog expressions`)")
+        if s.get("face", {}).get("blendshapes", "arkit52") == "none":
+            raise CliError("no_blendshapes", "This character is built without facial blendshapes",
+                           hint="ccreator set face.blendshapes=arkit52")
     with util.quiet(_log(p)):
         b = build.build_scene(s, p, work)
+        if expr:
+            build.set_expression(b, expr)
         frame = None
         if a.animation:
             frame = anim.pose_at(b.arm, a.animation, a.frame)
@@ -289,7 +305,7 @@ def cmd_render(a):
         paths, sheet = render.render_views(b.meshes, os.path.abspath(a.out or os.path.join(p, "renders")),
                                            views=views, size=a.size, samples=a.samples, prefix=prefix, bbox=bbox)
     return {"views": dict(zip(views, paths)), "sheet": sheet, "animation": a.animation, "frame": frame,
-            "focus": a.focus or "full",
+            "focus": a.focus or "full", **({"expression": expr} if expr else {}),
             "tip": "Open the sheet image to check the result visually"}
 
 
@@ -454,7 +470,7 @@ SCHEMA = {
     "garment remove <id>": "remove a garment",
     "template [targets...] [--out DIR] [--size PX]": "write UV template + mask PNGs (garment ids/types, 'body', or 'all')",
     "build [--out GLB] [--animations A,B|all] [--render]": "build and export the rigged GLB",
-    "render [--views front,three_quarter,side,back] [--focus full|upper|head] [--animation CLIP --frame 0..1]": "preview PNGs",
+    "render [--views front,three_quarter,side,back] [--focus full|upper|head] [--animation CLIP --frame 0..1] [--expression smile|jawOpen=0.6,...]": "preview PNGs",
     "animations": "list Mesh2Motion clips that can be baked into the GLB",
     "reference-body --out GLB [--with-rig]": "neutral body for authoring custom garments/hair",
     "autorig <mesh> --out GLB [--facing auto|-y|+y|-x|+x] [--animations A,B] [--render DIR]": "rig any humanoid mesh to the Mesh2Motion skeleton",
@@ -527,6 +543,7 @@ def parser():
     x.add_argument("--focus", choices=["full", "upper", "head"])
     x.add_argument("--animation")
     x.add_argument("--frame", type=float, default=0.25, help="0..1 = fraction of the clip, >1 = frame number")
+    x.add_argument("--expression", help="facial expression: a preset (smile, surprise, ...) and/or ARKit weights")
     x.add_argument("--size", type=int, default=512)
     x.add_argument("--samples", type=int, default=12)
     x.add_argument("--out")

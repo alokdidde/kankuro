@@ -63,5 +63,12 @@ def check(path):
         co = np.concatenate([util.get_coords(o) @ np.array(o.matrix_world)[:3, :3].T + np.array(o.matrix_world)[:3, 3]
                              for o in meshes])
         add("feet_on_ground", abs(co[:, 2].min()) < 0.03, {"min_z": round(float(co[:, 2].min()), 4)})
+    shape_names = {kb.name for o in meshes if o.data.shape_keys for kb in o.data.shape_keys.key_blocks[1:]}
+    from ..face import ARKIT_NAMES
+    if shape_names & set(ARKIT_NAMES):  # only judge files that carry (some) ARKit blendshapes
+        missing_shapes = [n for n in ARKIT_NAMES if n not in shape_names]
+        add("arkit_blendshapes", not missing_shapes,
+            {"found": len(shape_names), "missing": missing_shapes,
+             "meshes": [o.name for o in meshes if o.data.shape_keys]})
     acts = [a.name for a in bpy.data.actions]
     return {"glb": path, "valid": all(c["pass"] for c in checks), "checks": checks, "animations": acts}

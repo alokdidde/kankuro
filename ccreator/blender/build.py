@@ -7,7 +7,7 @@ import numpy as np
 from mathutils import Vector, interpolate
 from mathutils.bvhtree import BVHTree
 
-from .. import catalog, morph, textures
+from .. import catalog, face, morph, textures
 from ..errors import CliError
 from . import anim, body, garments, hair, materials, rig, util
 
@@ -323,7 +323,8 @@ def build_scene(spec, project, work_dir):
     _REF.clear()
     garments._UV_CACHE.clear()
     bd = spec["body"]
-    res = body.build(bd.get("macros"), bd.get("morphs"), bd.get("height_cm"))
+    blendshapes = face.SETS[spec.get("face", {}).get("blendshapes", "arkit52")]
+    res = body.build(bd.get("macros"), bd.get("morphs"), bd.get("height_cm"), face_keys=blendshapes)
     b.arm = res.arm
     b.res = res
     t = _tick(b, "body", t)
@@ -332,6 +333,15 @@ def build_scene(spec, project, work_dir):
     b.body = body_obj
     eyes = body.make_eyes(res)
     b.meshes += [body_obj, eyes]
+    if blendshapes:
+        # an open mouth needs something inside it
+        teeth_mat = materials.make("Teeth", color="#e9e2d2", roughness=0.35)
+        for group, name in (("helper-upper-teeth", "UpperTeeth"), ("helper-lower-teeth", "LowerTeeth"),
+                            ("helper-tongue", "Tongue")):
+            o = body.make_group_object(res, group, name, with_uv=False)
+            o.data.materials.append(teeth_mat if "Teeth" in name else
+                                    materials.make("Tongue", color="#a8545a", roughness=0.45, subsurface=0.2))
+            b.meshes.append(o)
 
     # skin
     skin = spec["skin"]
@@ -438,6 +448,15 @@ def export_glb(b, out_path, animations=()):
     return clips
 
 
+def set_expression(b, weights):
+    """Set facial blendshape weights {ARKit name: 0..1} on every mesh that has them (others go to 0)."""
+    for m in b.meshes:
+        keys = m.data.shape_keys
+        if keys:
+            for kb in keys.key_blocks[1:]:
+                kb.value = float(weights.get(kb.name, 0.0))
+
+
 def summary(b):
     out = {"meshes": []}
     for m in b.meshes:
@@ -449,4 +468,7 @@ def summary(b):
     co = util.get_coords(b.body)
     out["height_m"] = round(float(co[:, 2].max() - co[:, 2].min()), 3)
     out["skeleton"] = {"standard": "mesh2motion-human", "bones": len(b.arm.data.bones), "pose": "T"}
+    keys = b.body.data.shape_keys
+    out["blendshapes"] = {"set": "arkit52" if keys else "none", "count": len(keys.key_blocks) - 1 if keys else 0,
+                          "meshes": [m.name for m in b.meshes if m.data.shape_keys]}
     return out
