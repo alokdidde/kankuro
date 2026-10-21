@@ -24,10 +24,12 @@ that loads the project checks it, so a mistake shows up as a normal JSON error w
   },
   "skin": {
     "color": "#c68e6b", "texture": null, "roughness": 0.6,
-    "lips": true, "brows": true, "brow_color": "#2a1a12"
+    "lips": true, "brows": true, "brow_color": "#2a1a12",
+    "brow_thickness": 0.85, "brow_arch": 0.8, "brow_density": 1.0, "brow_length": 1.0
   },
   "eyes": {"iris_color": "#4a3020"},
-  "face": {"blendshapes": "arkit52"},
+  "face": {"blendshapes": "arkit52",
+           "shape": {"head.heart": 0.8, "chin.width": -0.6, "eyes.tilt": 0.3, "nose.tip_up": 0.2}},
   "hair": {"style": "ponytail", "color": "#1e1410"},
   "garments": [
     {"id": "tanktop", "type": "tanktop", "color": "#f2efe8"},
@@ -51,7 +53,7 @@ that loads the project checks it, so a mistake shows up as a normal JSON error w
 | `body` | object | shape |
 | `skin` | object | skin material |
 | `eyes` | object | eye colour |
-| `face` | object | facial blendshapes |
+| `face` | object | face shape sliders and facial blendshapes |
 | `hair` | object or `null` | `null` is bald |
 | `garments` | array | clothes, in any order (layers decide stacking) |
 | `export` | object | build options |
@@ -69,12 +71,18 @@ that loads the project checks it, so a mistake shows up as a normal JSON error w
 
 | field | type | default | meaning |
 |---|---|---|---|
-| `color` | hex | `#d8a383` | skin tone |
+| `color` | hex | `#d8a383` | whole-body skin tone (commands also accept names like `tan`, stored as hex) |
 | `texture` | path or `null` | `null` | PNG on the body UV layout (`kankuro template body`); replaces the flat tone |
 | `roughness` | number | 0.6 | material roughness |
 | `lips` | bool | true | tint the lips |
-| `brows` | bool | true | paint eyebrows |
-| `brow_color` | hex or `null` | `null` | eyebrow colour; `null` is a darker shade of the skin tone |
+| `brows` | bool | true | eyebrows on or off |
+| `brow_color` | hex or `null` | `null` | eyebrow colour; `null` follows the hair colour |
+| `brow_thickness` | 0.3..2 | 1.0 | eyebrow band height (0.5 thin, 1.6 bushy) |
+| `brow_arch` | -1..1 | 0.0 | -1 flat/straight, 1 high arch |
+| `brow_density` | 0.2..2 | 1.0 | hair count (0.4 sparse, 1.6 dense) |
+| `brow_length` | 0.5..1.4 | 1.0 | how far the tail reaches toward the temple |
+
+`kankuro brows` sets the last five (with presets); see [cli-reference.md#brows](cli-reference.md#brows).
 
 ### `eyes`
 
@@ -87,6 +95,8 @@ that loads the project checks it, so a mistake shows up as a normal JSON error w
 | field | type | default | meaning |
 |---|---|---|---|
 | `blendshapes` | `arkit52` or `none` | `arkit52` | export the 52 ARKit facial blendshapes as morph targets |
+| `shape` | object | `{}` | face sliders, `"group.name": value` (e.g. `"nose.width": 0.4`); merged into `body.morphs` at build time. Names and ranges: `kankuro face list` or [cli-reference.md#face](cli-reference.md#face) |
+| `seed` | int | absent | the seed of the last `face randomize` |
 
 ### `hair`
 

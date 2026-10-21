@@ -14,6 +14,7 @@ kankuro [-p PROJECT] [--version] <command> [options]
 
 * [How the CLI behaves](#how-the-cli-behaves): output, exit codes, projects, files
 * Project and spec: [init](#init) · [show](#show) · [set](#set) · [catalog](#catalog) · [morphs](#morphs) · [skin](#skin)
+* Face and look: [face](#face) · [eyes](#eyes) · [brows](#brows) · [Colour names](#colour-names)
 * Hair and clothes: [hair](#hair) · [garment](#garment) · [template](#template)
 * Output: [render](#render) · [build](#build) · [animations](#animations)
 * Assets and rigging: [reference-body](#reference-body) · [autorig](#autorig) · [validate](#validate)
@@ -153,11 +154,13 @@ Values are parsed as JSON when they can be (`0.6`, `183`, `true`, `null`), other
 | `body.morphs.<modifier>` | number | a detailed morph (see [morphs](#morphs)); `0` or `null` removes it |
 | `body.preset` | string | switch preset; **resets all sliders** to that preset |
 | `body.height_cm` | 50..250 or `null` | exact standing height; the body is scaled to it after the sliders |
-| `skin.color` | hex | skin tone |
+| `skin.color` | hex or [name](#colour-names) | whole-body skin tone |
 | `skin.roughness` | number | skin roughness (default 0.6) |
 | `skin.lips` / `skin.brows` | bool | tinted lips / painted eyebrows on or off |
-| `skin.brow_color` | hex or `null` | eyebrow colour (`null` = a darker shade of the skin tone) |
-| `eyes.iris_color` | hex or `null` | iris colour (`null` = the default brown eye texture) |
+| `skin.brow_color` | hex, hair-colour name or `null` | eyebrow colour (`null` = follow the hair colour) |
+| `skin.brow_thickness` / `brow_arch` / `brow_density` / `brow_length` | number | eyebrow shape, see [brows](#brows) |
+| `eyes.iris_color` | hex, eye-colour name or `null` | iris colour (`null` = the default brown eye texture) |
+| `face.shape.<slider>` | number | a face slider, e.g. `face.shape.nose.width=0.4` (see [face](#face)); `0` or `null` removes it |
 | `face.blendshapes` | `arkit52` or `none` | facial blendshapes in the GLB (default `arkit52`, see [Facial expressions](#facial-expressions)) |
 | `export.hide_body_under_clothes` | bool | delete body faces fully covered by clothes (default `true`, avoids poke-through) |
 | `export.texture_size` | int | resolution of baked garment maps (default 2048) |
@@ -185,14 +188,14 @@ kankuro set body.height_cm=null                                   # back to slid
 ```
 
 Prints `{"changed": {...}, "spec": {...}}`. Errors: `bad_assignment`, `bad_path`, `bad_value`,
-`unknown_macro`, `unknown_modifier`, `unknown_preset`, `bad_color`.
+`unknown_macro`, `unknown_modifier`, `unknown_preset`, `bad_color`, `unknown_face_slider`.
 
 ### catalog
 
 List what's available.
 
 ```
-kankuro catalog [presets|body_sliders|hair_styles|garments|fabrics|expressions]
+kankuro catalog [presets|body_sliders|face_sliders|face_presets|colors|brows|hair_styles|garments|fabrics|expressions]
 ```
 
 With no section it prints everything. Garment entries include `slot`, `layer` and default
@@ -221,11 +224,14 @@ kankuro set "body.morphs.chin/chin-prognathism-decr|incr=0.3"
 
 ### skin
 
-Skin tone, a painted skin texture, and eyebrow colour.
+Whole-body skin tone, a painted skin texture, and eyebrow colour.
 
 ```
-kankuro skin [--color HEX] [--texture PNG | --texture ""] [--brow-color HEX]
+kankuro skin [--color HEX|NAME] [--texture PNG | --texture ""] [--brow-color HEX|NAME]
 ```
+
+* `--color` takes `#RRGGBB` or a skin-tone name (see [Colour names](#colour-names)), e.g. `--color tan`.
+  It colours the whole body. A `--texture` overrides it (the output then carries a `note`).
 
 * `--texture` takes a PNG painted on the body UV layout (`kankuro template body` gives the layout).
   Pass an empty string to remove it.
@@ -234,12 +240,214 @@ Prints `{"skin": {...}}`.
 
 ---
 
+## Face and look
+
+Without face sliders every character gets the average face of its body sliders (gender, age, ethnicity
+mix), so characters look alike. Shape the face with `face`, then set colours with `skin`, `eyes`, `brows`
+and `hair`.
+
+### face
+
+```
+kankuro face list [--group GROUP]
+kankuro face set SLIDER=VALUE [SLIDER=VALUE ...]
+kankuro face preset NAME [NAME ...] [--amount F] [--add]
+kankuro face randomize [--seed N] [--strength 0..1] [--groups G1,G2] [--add]
+kankuro face reset [--groups G1,G2]
+```
+
+* `set` changes single sliders; out-of-range values are clamped, `0` or `null` removes one.
+* `preset` replaces the face sliders with an archetype (several names add up). `--amount 0.5` applies it
+  at half strength; `--add` adds it to the current sliders instead of replacing them.
+* `randomize` draws a plausible random face. The same `--seed` always gives the same face, and the seed
+  is saved as `face.seed`. `--strength`: 0.3 subtle, 0.5 natural (default), 1 caricature. `--groups
+  nose,mouth` re-rolls only those features and keeps the rest. `--add` adds the random offsets on top
+  (for example a preset plus a little randomness).
+* `reset` clears all face sliders, or only the given groups.
+
+Sliders are stored in `face.shape` and merged into the body morphs at build time, so they add to any
+raw `body.morphs` values. Paired features (eyes, cheeks, ears) move both sides together. Bipolar
+sliders run -1..1 with 0 = unchanged: about ±0.3 is subtle, ±0.6 clear, ±1 extreme. The `head.*` shape
+blends run 0..1.
+
+Prints `{"shape": {...}, "count": N}` (plus `seed` after `randomize`); `list` prints every slider with
+its range and description, the presets and the current values. Errors: `unknown_face_slider` (the
+`hint` lists that group's sliders), `unknown_face_preset`, `bad_group`, `bad_value`.
+
+```bash
+kankuro face preset angular
+kankuro face randomize --seed 7 --strength 0.3 --add      # angular, but its own person
+kankuro face set nose.hump=0.5 chin.cleft=0.4
+kankuro face randomize --groups eyes --seed 12            # new eyes only
+```
+
+**Presets**
+
+| preset | look |
+|---|---|
+| `angular` | lean, chiselled: high cheekbones, wide jaw, defined chin |
+| `soft` | soft and youthful: full cheeks, small nose, rounded chin |
+| `round` | round face, full cheeks, short chin |
+| `long` | long, narrow face with a long nose and chin |
+| `heart` | wide forehead and cheekbones tapering to a narrow pointed chin |
+| `square` | square face with a broad, strong jaw and chin |
+| `delicate` | fine features: narrow nose, small mouth, large eyes, small chin |
+| `rugged` | heavy brow, broad nose, narrow deep-set eyes, strong jaw |
+| `aquiline` | narrow face with a high-bridged, convex nose and thin lips |
+| `broad` | broad face: wide nose and nostrils, full lips, wide-set eyes |
+
+**Sliders**
+
+| slider | range | low .. high |
+|---|---|---|
+| `head.width` | -1..1 | narrow .. wide head |
+| `head.length` | -1..1 | short .. long head (vertical) |
+| `head.depth` | -1..1 | shallow .. deep head (front to back) |
+| `head.fat` | -1..1 | lean .. full face (soft tissue) |
+| `head.age` | -1..1 | younger .. older facial structure |
+| `head.oval` | 0..1 | blend towards an oval face |
+| `head.round` | 0..1 | blend towards a round face |
+| `head.square` | 0..1 | blend towards a square face |
+| `head.rectangular` | 0..1 | blend towards a long rectangular face |
+| `head.triangular` | 0..1 | blend towards a triangular face (wide jaw, narrow top) |
+| `head.heart` | 0..1 | blend towards a heart face (wide top, narrow chin) |
+| `head.diamond` | 0..1 | blend towards a diamond face (wide cheekbones) |
+| `forehead.height` | -1..1 | low .. high forehead |
+| `forehead.slope` | -1..1 | sloped back .. upright/forward forehead |
+| `forehead.bulge` | -1..1 | flat .. rounded (nubian) forehead |
+| `forehead.temples` | -1..1 | hollow .. full temples |
+| `brows.height` | -1..1 | low .. high brow ridge and eyebrows |
+| `brows.tilt` | -1..1 | outer ends down .. up |
+| `brows.ridge` | -1..1 | flat .. heavy, protruding brow ridge |
+| `eyes.size` | -1..1 | small .. large eyes |
+| `eyes.spacing` | -1..1 | close-set .. wide-set |
+| `eyes.height` | -1..1 | lower .. higher on the face |
+| `eyes.tilt` | -1..1 | downturned .. upturned (cat-eye) outer corners |
+| `eyes.openness` | -1..1 | narrow .. wide-open eyelids |
+| `eyes.lid_crease` | -1..1 | low/hidden .. high upper-lid crease |
+| `eyes.lid_fold` | -1..1 | concave .. convex (hooded) upper lid |
+| `eyes.monolid` | -1..1 | no .. strong epicanthic fold (inner corner covered) |
+| `eyes.width` | -1..1 | short .. long eye opening (corner to corner) |
+| `eyes.bags` | -1..1 | smooth .. puffy under-eye bags |
+| `nose.width` | -1..1 | narrow .. wide nose |
+| `nose.length` | -1..1 | short .. long nose |
+| `nose.projection` | -1..1 | flat .. projecting nose |
+| `nose.height` | -1..1 | lower .. higher on the face |
+| `nose.bridge` | -1..1 | narrow .. wide bridge |
+| `nose.nostrils` | -1..1 | narrow .. wide nostrils |
+| `nose.flare` | -1..1 | tight .. flared nostril wings |
+| `nose.tip_width` | -1..1 | pointed .. bulbous tip |
+| `nose.tip_up` | -1..1 | drooping .. upturned tip |
+| `nose.hump` | -1..1 | straight .. humped bridge |
+| `nose.curve` | -1..1 | concave (ski slope) .. convex (aquiline) |
+| `nose.volume` | -1..1 | slim .. fleshy nose |
+| `mouth.width` | -1..1 | narrow .. wide mouth |
+| `mouth.height` | -1..1 | lower .. higher on the face |
+| `mouth.protrusion` | -1..1 | recessed .. protruding mouth |
+| `mouth.upper_lip` | -1..1 | thin .. full upper lip |
+| `mouth.lower_lip` | -1..1 | thin .. full lower lip |
+| `mouth.corners` | -1..1 | downturned .. upturned mouth corners |
+| `mouth.cupids_bow` | -1..1 | flat .. pronounced cupid's bow |
+| `mouth.philtrum` | -1..1 | flat .. deep philtrum |
+| `mouth.dimples` | -1..1 | none .. dimples |
+| `mouth.laugh_lines` | -1..1 | smooth .. deep laugh lines |
+| `jaw.width` | -1..1 | narrow .. wide, strong jaw |
+| `jaw.drop` | -1..1 | short .. long lower jaw |
+| `jaw.underbite` | -1..1 | overbite .. underbite (prognathism) |
+| `chin.width` | -1..1 | pointed .. broad chin |
+| `chin.height` | -1..1 | short .. tall chin |
+| `chin.projection` | -1..1 | receding .. jutting chin |
+| `chin.cleft` | -1..1 | smooth .. cleft chin |
+| `cheeks.bones` | -1..1 | flat .. high, wide cheekbones |
+| `cheeks.volume` | -1..1 | hollow .. full cheeks |
+| `cheeks.inner` | -1..1 | flat .. full under-eye cheek (apple) |
+| `cheeks.height` | -1..1 | low .. high cheek mass |
+| `ears.size` | -1..1 | small .. large ears |
+| `ears.protrusion` | -1..1 | flat against the head .. sticking out |
+| `ears.lobes` | -1..1 | small .. large lobes |
+| `ears.pointed` | -1..1 | round .. pointed tips |
+| `ears.height` | -1..1 | lower .. higher on the head |
+| `neck.width` | -1..1 | slim .. thick neck |
+
+### eyes
+
+Iris colour and eye shape.
+
+```
+kankuro eyes [--color HEX|NAME] [SLIDER=VALUE ...]
+```
+
+The sliders are the `eyes.*` face sliders, written with or without the prefix: `size`, `spacing`,
+`height`, `tilt` (+ = upturned, cat-eye), `openness`, `width`, `lid_crease`, `lid_fold`, `monolid`,
+`bags`. Eye colour names: `dark_brown`, `brown`, `light_brown`, `amber`, `hazel`, `green`, `grey_green`, `grey`, `blue`, `light_blue`, `steel_blue`, `violet`, `red`, `gold`.
+
+```bash
+kankuro eyes --color hazel tilt=0.4 monolid=0.5 size=0.2
+```
+
+Prints `{"eyes": {"iris_color": ...}, "shape": {eyes.* sliders}, "sliders": {...}}`.
+
+### brows
+
+Eyebrow hair shape and colour, and the brow-ridge sliders.
+
+```
+kankuro brows [--preset NAME] [--color HEX|NAME|hair] [--thickness F] [--arch F] [--density F]
+              [--length F] [--on | --off] [SLIDER=VALUE ...]
+```
+
+| option | spec key | range | meaning |
+|---|---|---|---|
+| `--thickness` | `skin.brow_thickness` | 0.3..2.0 (default 1.0) | band height: 0.5 thin, 1 natural, 1.6 bushy |
+| `--arch` | `skin.brow_arch` | -1.0..1.0 (default 0.0) | -1 flat/straight .. 0 natural .. 1 high arch |
+| `--density` | `skin.brow_density` | 0.2..2.0 (default 1.0) | hair count: 0.4 sparse, 1 natural, 1.6 dense |
+| `--length` | `skin.brow_length` | 0.5..1.4 (default 1.0) | how far the tail reaches toward the temple: 0.7 short, 1.2 long |
+| `--color` | `skin.brow_color` | hex or hair-colour name | `hair` or `none` = follow the hair colour (default) |
+| `--on` / `--off` | `skin.brows` | | eyebrows on or off |
+
+A `--preset` sets all four shape values; options given with it override it.
+
+| preset | values |
+|---|---|
+| `natural` | thickness 1.0, arch 0.0, density 1.0, length 1.0 |
+| `thin` | thickness 0.55, arch 0.3, density 0.8, length 0.95 |
+| `thick` | thickness 1.45, arch -0.1, density 1.4, length 1.05 |
+| `bushy` | thickness 1.7, arch -0.2, density 1.7, length 1.1 |
+| `straight` | thickness 1.1, arch -0.9, density 1.1, length 1.05 |
+| `arched` | thickness 0.85, arch 0.8, density 1.0, length 1.0 |
+| `sparse` | thickness 0.8, arch 0.0, density 0.45, length 0.85 |
+| `short` | thickness 1.0, arch 0.1, density 1.0, length 0.72 |
+
+The sliders are the `brows.*` face sliders (the brow ridge under the hair): `height`, `tilt`, `ridge`.
+
+```bash
+kankuro brows --preset arched --color dark_brown
+kankuro brows --thickness 1.3 --arch -0.5 ridge=0.3
+```
+
+Prints `{"brows": {...}, "brow_color_used": ..., "ridge_shape": {...}, "presets": [...]}`.
+Errors: `unknown_brow_preset`, `bad_value`, `bad_color`.
+
+### Colour names
+
+Every colour option takes `#RRGGBB` or a name from its palette (`kankuro catalog colors` prints the
+hex values):
+
+* **skin** (`skin --color`, `skin.color`): `porcelain`, `fair`, `light`, `light_olive`, `medium`, `olive`, `tan`, `golden_brown`, `brown`, `dark_brown`, `deep`, `ebony`, `pale_grey`, `orc_green`, `blue`
+* **hair** (`hair --color`, `brows --color`, `skin --brow-color`): `black`, `soft_black`, `dark_brown`, `brown`, `chestnut`, `auburn`, `copper`, `ginger`, `light_brown`, `dark_blonde`, `blonde`, `platinum`, `ash_blonde`, `grey`, `salt_pepper`, `white`, `blue_black`, `burgundy`, `pink`, `blue`, `green`, `purple`
+* **eyes** (`eyes --color`, `eyes.iris_color`): `dark_brown`, `brown`, `light_brown`, `amber`, `hazel`, `green`, `grey_green`, `grey`, `blue`, `light_blue`, `steel_blue`, `violet`, `red`, `gold`
+
+Garment `--color` accepts any of these names too.
+
+---
+
 ## Hair and clothes
 
 ### hair
 
 ```
-kankuro hair set <style> [--color HEX] [--texture PNG]
+kankuro hair set <style> [--color HEX|NAME] [--texture PNG]
+kankuro hair set --color HEX|NAME          # recolour the current hair, keep the style
 kankuro hair import --file MESH [--color HEX] [--texture PNG]
 kankuro hair remove
 ```
@@ -556,7 +764,7 @@ quickest thing for an agent to read first.
 | `bad_assignment` | `set` argument without `=` | `path=value` |
 | `bad_path` | `set` on a path that can't be set | see the table under [set](#set) |
 | `bad_value` | wrong type or out of range | read `message` |
-| `bad_color` | not a hex colour | `#RRGGBB` |
+| `bad_color` | not a hex colour or a known colour name | `#RRGGBB` or a name from [Colour names](#colour-names) |
 | `unknown_preset`, `unknown_macro`, `unknown_modifier`, `unknown_hair`, `unknown_garment`, `unknown_fabric`, `unknown_animation` | a name not in the catalog | `hint` lists valid names |
 | `duplicate_garment` | a garment with that id exists | `--id <other>` or `garment set` |
 | `no_garment` | no garment with that id | `hint` lists current ids |
@@ -564,6 +772,7 @@ quickest thing for an agent to read first.
 | `missing_file` | a file you passed, or one the spec refers to, doesn't exist | check the path |
 | `bad_format`, `no_mesh` | an imported mesh can't be read | use `.glb`, `.gltf`, `.obj` or `.fbx` with a mesh in it |
 | `bad_view`, `bad_focus`, `bad_section`, `bad_expression` | an option value isn't recognised | `hint` lists valid values |
+| `unknown_face_slider`, `unknown_face_preset`, `unknown_brow_preset`, `bad_group` | a face/brow name not in the catalog | `hint` lists valid names; `kankuro face list` |
 | `no_blendshapes` | `render --expression` on a character built with `face.blendshapes=none` | `kankuro set face.blendshapes=arkit52` |
 | `autorig_failed` | the mesh isn't an upright humanoid with separate legs | read `message` |
 | `no_blender` | `bpy` can't be imported | install `bpy==5.2.*` on Python 3.13 (see [installation.md](installation.md)) |

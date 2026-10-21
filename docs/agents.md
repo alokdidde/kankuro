@@ -24,7 +24,7 @@ at the bottom straight into an agent's instructions.
 ```text
 1. kankuro schema; kankuro catalog                 # learn what exists
 2. kankuro init <dir> --preset <closest preset>
-3. kankuro set ... / hair set ... / garment add ...  # rough pass from the brief
+3. kankuro set ... / face ... / skin / eyes / brows / hair set ... / garment add ...  # rough pass from the brief
 4. kankuro render                                   # look at render_sheet.png
 5. compare with the brief; adjust with set / garment set; render again
    (use --focus head for faces, --animation Jog --frame 0.3 for clothing in motion)
@@ -41,7 +41,12 @@ Keep renders cheap while iterating (`--size 384 --samples 8`) and raise them for
 | "a tall, muscular man in his 40s" | `--preset athletic_male`, `set body.macros.age=0.65 body.height_cm=190` |
 | "slim older woman" | `--preset elder_female`, `set body.macros.weight=0.3` |
 | "East Asian features" | `set body.macros.asian=0.8 body.macros.caucasian=0.2 body.macros.african=0` |
-| "a strong jaw, narrow nose" | `kankuro morphs --search jaw`, `--search nose`, then `set "body.morphs.<name>=<value>"` |
+| "a strong jaw, narrow nose" | `face set jaw.width=0.6 nose.width=-0.5` (`face list` shows every slider) |
+| "a chiselled / round / heart-shaped face" | `face preset angular` (or `round`, `heart`, ...), then single `face set` tweaks |
+| several characters that must not look alike | give each its own `face randomize --seed N` (alone, or `--add` on top of a preset) |
+| "olive skin, hazel cat eyes" | `skin --color olive`, `eyes --color hazel tilt=0.5` |
+| "thick dark eyebrows", "thin arched brows" | `brows --preset thick --color soft_black`, `brows --preset arched` |
+| "auburn hair" | `hair set <style> --color auburn` (or `hair set --color auburn` to keep the style) |
 | "a denim jacket" | `garment add jacket --fabric denim --color "#3b4f6b"` |
 | "a printed T-shirt" | `template tshirt`, have an image model paint it (see [codex-textures.md](codex-textures.md)), `garment set tshirt --texture <png>` |
 | "smiling" / "surprised" portrait | `render --focus head --expression smile` (presets or ARKit weights like `jawOpen=0.5`) |
@@ -88,6 +93,9 @@ You can build rigged 3D characters with the `kankuro` CLI (alias `ccreator`).
 - A project is a folder with character.json. Create it with `kankuro init <dir> --preset <preset>`.
   Put -p <dir> BEFORE the command, or cd into the folder.
 - Shape with `kankuro set body.macros.<slider>=<0..1>` and `body.height_cm=<cm>`; quote morph names: "body.morphs.<name>=<v>".
+- Face: every character needs its own face. Use `kankuro face preset <archetype>`, `kankuro face randomize --seed N`
+  and `kankuro face set <group.slider>=<-1..1>` (`kankuro face list`). Eyes: `kankuro eyes --color <name|#hex> tilt=..`.
+  Eyebrows: `kankuro brows --preset <name> --color <name|#hex>`. Skin: `kankuro skin --color <name|#hex>`.
 - Hair: `kankuro hair set <style> --color "#hex"`. Clothes: `kankuro garment add <type> --color "#hex" [--fabric name]`.
 - After visible changes run `kankuro render` and look at renders/render_sheet.png. Use --focus head for faces.
 - Custom fabric prints: `kankuro template <id>`, get the image painted on that template outside kankuro,
