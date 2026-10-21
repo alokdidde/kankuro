@@ -42,6 +42,44 @@ class SpecCommands(unittest.TestCase):
         name = out["modifiers"][0]["name"]
         cc("set", f"body.morphs.{name}=0.5", project=self.p)
 
+    def test_face_sliders(self):
+        out = cc("face", "set", "nose.width=0.4", "jaw.width=-3", project=self.p)
+        self.assertEqual(out["shape"], {"jaw.width": -1.0, "nose.width": 0.4})
+        bad = cc("face", "set", "nose.wdth=1", project=self.p, ok=False)
+        self.assertEqual(bad["error"]["code"], "unknown_face_slider")
+        self.assertIn("nose.width", bad["error"]["hint"])
+        out = cc("face", "preset", "angular", project=self.p)
+        self.assertNotIn("nose.width", out["shape"])
+        a = cc("face", "randomize", "--seed", "5", project=self.p)["shape"]
+        b = cc("face", "randomize", "--seed", "5", project=self.p)["shape"]
+        self.assertEqual(a, b)
+        self.assertGreater(len(a), 20)
+        out = cc("face", "randomize", "--seed", "1", "--groups", "nose", project=self.p)["shape"]
+        self.assertEqual({k: v for k, v in out.items() if not k.startswith("nose.")},
+                         {k: v for k, v in a.items() if not k.startswith("nose.")})
+        self.assertNotEqual(out, a)
+        out = cc("face", "reset", project=self.p)
+        self.assertEqual(out["shape"], {})
+        cc("set", "face.shape.chin.cleft=0.5", project=self.p)
+        self.assertEqual(cc("show", project=self.p)["spec"]["face"]["shape"], {"chin.cleft": 0.5})
+
+    def test_colors_eyes_brows(self):
+        out = cc("skin", "--color", "tan", project=self.p)
+        self.assertTrue(out["skin"]["color"].startswith("#"))
+        out = cc("eyes", "--color", "hazel", "tilt=0.4", project=self.p)
+        self.assertEqual(out["shape"], {"eyes.tilt": 0.4})
+        self.assertTrue(out["eyes"]["iris_color"].startswith("#"))
+        out = cc("brows", "--preset", "thick", "--color", "auburn", "--arch", "0.5", "ridge=0.2", project=self.p)
+        self.assertEqual(out["brows"]["brow_arch"], 0.5)
+        self.assertEqual(out["ridge_shape"], {"brows.ridge": 0.2})
+        bad = cc("brows", "--arch", "3", project=self.p, ok=False)
+        self.assertEqual(bad["error"]["code"], "bad_value")
+        cc("hair", "set", "short", "--color", "blonde", project=self.p)
+        out = cc("hair", "set", "--color", "#112233", project=self.p)
+        self.assertEqual(out["hair"], {"style": "short", "color": "#112233"})
+        bad = cc("eyes", "--color", "plaid", project=self.p, ok=False)
+        self.assertEqual(bad["error"]["code"], "bad_color")
+
     def test_garment_slots(self):
         cc("garment", "add", "tshirt", project=self.p)
         out = cc("garment", "add", "longsleeve", "--color", "#334455", project=self.p)
@@ -66,6 +104,7 @@ class BuildCommands(unittest.TestCase):
         cc("garment", "add", "tanktop", "--color", "#c0392b", project=cls.p)
         cc("garment", "add", "skirt", "--color", "#2c3e50", project=cls.p)
         cc("garment", "add", "boots", project=cls.p)
+        cc("face", "randomize", "--seed", "3", project=cls.p)
 
     def test_build_validate(self):
         out = cc("build", "--animations", "Idle_A", project=self.p)

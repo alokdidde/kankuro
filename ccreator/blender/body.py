@@ -82,7 +82,9 @@ def build(macros=None, modifiers=None, height_cm=None, face_keys=()):
         # facial blendshapes ride the T-pose conversion as shape keys (rig._posed_coords bakes them)
         tmp.shape_key_add(name="Basis")
         for name, d in face.deltas(co, list(face_keys), macros).items():
-            tmp.shape_key_add(name=name, from_mix=False).data.foreach_set("co", (co + d).ravel())
+            kb = tmp.shape_key_add(name=name, from_mix=False)
+            kb.value = 0.0  # bpy 5.2 starts new keys at 1.0
+            kb.data.foreach_set("co", (co + d).ravel())
 
     arm = rig.create_armature(rig.fit_from_makehuman(co))
     util.add_armature_modifier(tmp, arm)
@@ -107,6 +109,7 @@ def add_face_keys(obj, keys):
     obj.shape_key_add(name="Basis")
     for name in keys:
         kb = obj.shape_key_add(name=name, from_mix=False)
+        kb.value = 0.0  # bpy 5.2 starts new keys at 1.0
         if name in moving:
             kb.data.foreach_set("co", moving[name].ravel())
 

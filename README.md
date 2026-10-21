@@ -63,7 +63,9 @@ troubleshooting: [docs/installation.md](docs/installation.md).
 ```bash
 ccreator init ./hero --preset athletic_male
 cd hero                                   # or pass -p ./hero, or set CCREATOR_PROJECT
-ccreator set body.height_cm=183 body.macros.weight=0.6 skin.color=#8d5524 eyes.iris_color=#3a6ea5
+ccreator set body.height_cm=183 body.macros.weight=0.6
+ccreator face preset angular && ccreator face randomize --seed 7 --strength 0.3 --add   # give it its own face
+ccreator skin --color brown && ccreator eyes --color hazel && ccreator brows --preset thick
 ccreator hair set short --color "#1a1410"
 ccreator garment add tshirt --color "#eeeeee"
 ccreator garment add jacket --color "#3d5a40"
@@ -154,6 +156,63 @@ Check the renders: limbs should bend at the joints and the walk should look like
 body's. Tested on 33 Mesh2Motion sample characters (joint error against their hand-placed skeletons
 is about 3% of height on average) plus Mixamo, VRM and glTF sample models.
 
+## Face shape, skin, eyes, eyebrows and hair colour
+
+Every face starts as the body sliders' average face (gender, age, ethnicity mix), so characters look alike
+unless the face is shaped. The `face` command gives **68 named, symmetric sliders** over MakeHuman's face
+targets, **10 archetype presets** and **seeded randomisation**. Values are stored in `face.shape` in
+`character.json` and merged into the body morphs at build time.
+
+```bash
+ccreator face list [--group nose]                  # sliders with ranges and descriptions, presets, current values
+ccreator face set nose.width=0.4 jaw.width=-0.3 chin.projection=0.5   # 0 removes a slider
+ccreator face preset angular                       # angular soft round long heart square delicate rugged aquiline broad
+ccreator face preset heart --amount 0.6 --add      # blend a preset on top of the current sliders
+ccreator face randomize --seed 42 --strength 0.5   # a new, plausible face; same seed = same face
+ccreator face randomize --groups nose,mouth --seed 3   # re-roll only some features
+ccreator face reset [--groups eyes]
+```
+
+Slider groups: `head` (width, length, depth, fat, age, and 0..1 blends towards oval, round, square,
+rectangular, triangular, heart, diamond), `forehead`, `brows` (brow ridge: height, tilt, ridge), `eyes`,
+`nose`, `mouth`, `jaw`, `chin`, `cheeks`, `ears`, `neck`. Bipolar sliders run -1..1 with 0 = unchanged;
+about ±0.3 is a subtle change, ±0.6 clear, ±1 extreme. `--strength` for `randomize`: 0.3 subtle, 0.5
+natural (the default), 1 caricature. The seed is saved in `face.seed`.
+The raw MakeHuman modifiers (`ccreator morphs`) still work and add to the sliders.
+
+**Colours.** Every colour option takes `#RRGGBB` or a name from its palette (`ccreator catalog colors`):
+
+```bash
+ccreator skin --color tan              # whole body. porcelain fair light light_olive medium olive tan golden_brown
+                                       #   brown dark_brown deep ebony (+ pale_grey orc_green blue)
+ccreator hair set long --color auburn  # black soft_black dark_brown brown chestnut auburn copper ginger light_brown
+                                       #   dark_blonde blonde platinum ash_blonde grey salt_pepper white + dyed colours
+ccreator hair set --color platinum     # recolour the current hair, keep the style
+```
+
+**Eyes.** Iris colour plus the `eyes.*` sliders, without the prefix:
+
+```bash
+ccreator eyes --color hazel size=0.3 tilt=0.4 monolid=0.5
+#   colours: dark_brown brown light_brown amber hazel green grey_green grey blue light_blue steel_blue violet red gold
+#   shape:   size spacing height tilt (up = cat-eye) openness width lid_crease lid_fold monolid bags
+```
+
+**Eyebrows.** Hair shape and colour, plus the brow-ridge sliders (`brows.*`):
+
+```bash
+ccreator brows --preset arched --color dark_brown   # natural thin thick bushy straight arched sparse short
+ccreator brows --thickness 1.3 --arch -0.5 --density 1.2 --length 0.9 height=0.2 ridge=0.3
+ccreator brows --color hair                         # follow the hair colour (the default)
+ccreator brows --off                                # no eyebrows
+```
+
+`--thickness` 0.3..2 (1 natural), `--arch` -1 flat .. 1 high, `--density` 0.2..2, `--length` 0.5..1.4. They
+are stored as `skin.brow_thickness`, `brow_arch`, `brow_density`, `brow_length` and `skin.brow_color`.
+
+[examples/face_variety.png](examples/face_variety.png) shows eight characters made only with these commands
+(`tools/face_variety.sh` rebuilds it).
+
 ## Facial expressions (ARKit 52)
 
 `build` adds the 52 ARKit blendshapes with their standard names to `Body`, `Eyes`, `LowerTeeth` and
@@ -186,11 +245,14 @@ Run `ccreator schema` for the machine-readable list. In brief:
 |---|---|
 | `init <dir> [--preset]` | new project (`catalog presets` lists presets) |
 | `show` | spec + last build manifest |
-| `set path=value ...` | `body.macros.<slider>`, `body.morphs.<modifier>`, `body.height_cm`, `skin.*`, `eyes.iris_color`, `face.blendshapes` (`arkit52`/`none`), `name` |
+| `set path=value ...` | `body.macros.<slider>`, `body.morphs.<modifier>`, `face.shape.<slider>`, `body.height_cm`, `skin.*`, `eyes.iris_color`, `face.blendshapes` (`arkit52`/`none`), `name` |
 | `catalog [section]` | presets, body sliders, hair styles, garment types |
 | `morphs [--group] [--search]` | detailed morph modifiers (nose, jaw, torso, limbs, ...) |
-| `skin [--color] [--texture] [--brow-color]` | skin tone or painted skin texture |
-| `hair set/import/remove` | hair |
+| `skin [--color] [--texture] [--brow-color]` | whole-body skin tone (hex or name) or painted skin texture |
+| `face list/set/preset/randomize/reset` | face shape sliders, archetypes, seeded random faces |
+| `eyes [--color] [slider=v ...]` | iris colour and eye shape |
+| `brows [--preset] [--color] [--thickness --arch --density --length] [--on/--off]` | eyebrow shape and colour |
+| `hair set/import/remove` | hair (`hair set --color X` recolours) |
 | `garment add/import/set/remove` | clothes; `--texture`, `--fabric`, `--height`, `--normal` for surface; adding a garment replaces any other in the same slot unless `--keep-slot` |
 | `template [ids|types|body|all]` | UV template + mask PNGs |
 | `render [--views] [--focus] [--animation --frame] [--expression]` | preview PNGs + a combined sheet |
@@ -217,6 +279,7 @@ ccreator/cli.py            commands, JSON I/O
 ccreator/spec.py           character.json schema, presets, validation
 ccreator/morph.py          MakeHuman macro/detail morphs (numpy)
 ccreator/face.py           ARKit 52 facial blendshapes from MakeHuman face units (numpy)
+ccreator/appearance.py     face shape sliders, face presets, randomisation, named colours, eyebrow keys
 ccreator/catalog.py        hair styles and garment definitions
 ccreator/textures.py       skin map, UV templates
 ccreator/fabric.py         fabric relief: weave/stitch/fold height -> normal map, albedo bake

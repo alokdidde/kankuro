@@ -5,7 +5,7 @@ import os
 import re
 import shutil
 
-from . import catalog, morph
+from . import appearance, catalog, morph
 from .errors import CliError
 
 SPEC_FILE = "character.json"
@@ -34,9 +34,10 @@ def default_spec(name="character", preset="neutral"):
         "name": name,
         "body": {"preset": preset, "macros": dict(PRESETS[preset]), "morphs": {}, "height_cm": None},
         "skin": {"color": "#d8a383", "texture": None, "roughness": 0.6,
-                 "lips": True, "brows": True, "brow_color": None},
+                 "lips": True, "brows": True, "brow_color": None,
+                 **{k: d for k, (d, _, _) in appearance.BROW_KEYS.items()}},
         "eyes": {"iris_color": None},
-        "face": {"blendshapes": "arkit52"},
+        "face": {"blendshapes": "arkit52", "shape": {}},
         "hair": None,
         "garments": [],
         "export": {"animations": [], "hide_body_under_clothes": True, "texture_size": 2048},
@@ -69,12 +70,22 @@ def save(project, spec):
     os.replace(tmp, project_path(project))
 
 
-def color(value, field):
+def color(value, field, palette=None):
+    """#RRGGBB or a colour name (`ccreator catalog colors`) -> '#rrggbb'."""
     if value is None:
         return None
+    named = appearance.named_color(value, palette)
+    if named:
+        return named
     if not isinstance(value, str) or not HEX.match(value):
-        raise CliError("bad_color", f"{field}: '{value}' is not a hex colour", hint="Use #RRGGBB, e.g. #a0522d")
+        names = ", ".join(appearance.PALETTES[palette]) if palette else "see `ccreator catalog colors`"
+        raise CliError("bad_color", f"{field}: '{value}' is not a hex colour or a known colour name",
+                       hint=f"Use #RRGGBB (e.g. #a0522d) or a name: {names}")
     return "#" + value.lstrip("#").lower()
+
+
+def _palette(path):
+    return {"skin.color": "skin", "eyes.iris_color": "eyes", "skin.brow_color": "hair"}.get(path)
 
 
 def validate(spec, project):
@@ -90,6 +101,10 @@ def validate(spec, project):
     color(spec["eyes"].get("iris_color"), "eyes.iris_color")
     if spec["skin"].get("texture"):
         _check_file(project, spec["skin"]["texture"], "skin.texture")
+    for key in appearance.BROW_KEYS:
+        if spec["skin"].get(key) is not None:
+            appearance.check_brow(key, spec["skin"][key])
+    appearance.validate_shape(spec.get("face", {}).get("shape") or {})
     shapes = spec.get("face", {}).get("blendshapes", "arkit52")
     if shapes not in ("arkit52", "none"):
         raise CliError("bad_value", f"Unknown face.blendshapes '{shapes}'", hint="Valid: arkit52, none")
@@ -171,6 +186,7 @@ SETTABLE = {
     "skin.brow_color": (str, type(None)),
     "eyes.iris_color": (str, type(None)),
     "face.blendshapes": str,
+    **{f"skin.{k}": (int, float) for k in appearance.BROW_KEYS},
     "export.hide_body_under_clothes": bool,
     "export.texture_size": int,
 }
@@ -203,9 +219,19 @@ def set_path(spec, path, value):
                                hint="Run `ccreator morphs list` (optionally --search <text>)")
             spec["body"]["morphs"][name] = float(value)
         return spec
+    if path.startswith("face.shape.") and len(parts) == 4:
+        name = path[len("face.shape."):]
+        shape = spec.setdefault("face", {}).setdefault("shape", {})
+        if value is None or value == 0:
+            appearance.clamp(name, 0)
+            shape.pop(name, None)
+        else:
+            shape[name] = appearance.clamp(name, value)
+        return spec
     if path not in SETTABLE:
         raise CliError("bad_path", f"Cannot set '{path}'",
-                       hint="Settable: body.macros.<slider>, body.morphs.<modifier>, " + ", ".join(SETTABLE)
+                       hint="Settable: body.macros.<slider>, body.morphs.<modifier>, face.shape.<slider>, "
+                       + ", ".join(SETTABLE)
                        + ". Use the hair/garment commands for hair and clothes.")
     if not isinstance(value, SETTABLE[path]) or (SETTABLE[path] is not bool and isinstance(value, bool)):
         raise CliError("bad_value", f"Wrong type for {path}: {value!r}")
@@ -219,6 +245,13 @@ def set_path(spec, path, value):
     for p in parts[:-1]:
         node = node.setdefault(p, {})
     if path.endswith("color") and value is not None:
-        value = color(value, path)
+        value = color(value, path, _palette(path))
+    if path[len("skin."):] in appearance.BROW_KEYS:
+        value = appearance.check_brow(path[len("skin."):], value)
     node[parts[-1]] = value
     return spec
+
+
+def effective_morphs(spec):
+    """body.morphs with the face.shape sliders merged in: what `build` actually applies."""
+    return appearance.effective_morphs(spec)

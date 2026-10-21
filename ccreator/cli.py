@@ -12,7 +12,7 @@ import sys
 import time
 import traceback
 
-from . import catalog, morph, spec as specmod
+from . import appearance, catalog, morph, spec as specmod
 from .errors import CliError
 
 VERSION = "0.1.0"
@@ -80,6 +80,12 @@ def cmd_catalog(a):
         "garments": {k: {"desc": v["desc"], "slot": v["slot"], "layer": v["layer"], "fabric": v.get("fabric")}
                      for k, v in catalog.GARMENTS.items()},
         "fabrics": {k: v["desc"] for k, v in __import__("ccreator.fabric", fromlist=["FABRICS"]).FABRICS.items()},
+        "face_sliders": {k: {"range": r, "desc": d} for k, (d, _, r) in appearance.FACE_SLIDERS.items()},
+        "face_presets": {k: v["desc"] for k, v in appearance.FACE_PRESETS.items()},
+        "colors": {"skin": appearance.SKIN_TONES, "hair": appearance.HAIR_COLORS, "eyes": appearance.EYE_COLORS,
+                   "usage": "any colour option takes #RRGGBB or one of these names"},
+        "brows": {"keys": {k: {"default": d, "range": r, "desc": desc} for k, (d, r, desc) in appearance.BROW_KEYS.items()},
+                  "presets": appearance.BROW_PRESETS},
         "detail_morphs": f"{len(morph.modifier_catalog())} modifiers; list with `ccreator morphs`",
         "animations": "list with `ccreator animations`",
         "expressions": {"blendshapes": __import__("ccreator.face", fromlist=["ARKIT_NAMES"]).ARKIT_NAMES,
@@ -113,10 +119,16 @@ def cmd_hair(a):
     if a.action == "remove":
         s["hair"] = None
     elif a.action == "set":
+        if not a.style and s["hair"] and a.color:
+            if s["hair"].get("source") or s["hair"].get("style") == "custom":
+                s["hair"]["color"] = specmod.color(a.color, "color", "hair")
+                specmod.save(p, s)
+                return {"hair": s["hair"]}
+            a.style = s["hair"]["style"]
         if a.style not in catalog.HAIR_STYLES:
             raise CliError("unknown_hair", f"Unknown hair style '{a.style}'",
                            hint=f"Valid: {', '.join(catalog.HAIR_STYLES)}")
-        h = {"style": a.style, "color": specmod.color(a.color, "color") or (s["hair"] or {}).get("color") or "#3b2a1e"}
+        h = {"style": a.style, "color": specmod.color(a.color, "color", "hair") or (s["hair"] or {}).get("color") or "#3b2a1e"}
         if a.texture:
             h["texture"] = specmod.import_file(p, a.texture, "textures")
         s["hair"] = h
@@ -124,7 +136,7 @@ def cmd_hair(a):
         if not a.file:
             raise CliError("missing_arg", "hair import needs --file <mesh>")
         h = {"style": "custom", "source": specmod.import_file(p, a.file, "meshes"),
-             "color": specmod.color(a.color, "color")}
+             "color": specmod.color(a.color, "color", "hair")}
         if a.texture:
             h["texture"] = specmod.import_file(p, a.texture, "textures")
         s["hair"] = h
@@ -381,13 +393,155 @@ def cmd_skin(a):
     p = _project(a)
     s = specmod.load(p)
     if a.color:
-        s["skin"]["color"] = specmod.color(a.color, "color")
+        s["skin"]["color"] = specmod.color(a.color, "color", "skin")
     if a.texture is not None:
         s["skin"]["texture"] = specmod.import_file(p, a.texture, "textures") if a.texture else None
     if a.brow_color:
-        s["skin"]["brow_color"] = specmod.color(a.brow_color, "brow_color")
+        s["skin"]["brow_color"] = specmod.color(a.brow_color, "brow_color", "hair")
     specmod.save(p, s)
-    return {"skin": s["skin"]}
+    out = {"skin": s["skin"]}
+    if s["skin"].get("texture"):
+        out["note"] = "A skin texture is set, so skin.color is ignored; pass --texture '' to use the colour"
+    return out
+
+
+def _assignments(items, prefix=""):
+    out = {}
+    for item in items or []:
+        if "=" not in item:
+            raise CliError("bad_assignment", f"Expected slider=value, got '{item}'",
+                           hint="e.g. nose.width=0.4 eyes.tilt=-0.3 (see `ccreator face list`)")
+        k, v = item.split("=", 1)
+        k = k.strip()
+        if prefix and not k.startswith(prefix):
+            k = prefix + k
+        out[k] = specmod.parse_value(v)
+    return out
+
+
+def _face_summary(s):
+    shape = s.get("face", {}).get("shape") or {}
+    return {"shape": dict(sorted(shape.items())), "count": len(shape)}
+
+
+def cmd_face(a):
+    if a.action == "list":
+        sliders = {k: {"range": r, "desc": d} for k, (d, _, r) in appearance.FACE_SLIDERS.items()
+                   if not a.group or k.split(".")[0] == a.group}
+        out = {"sliders": sliders, "groups": sorted({k.split(".")[0] for k in appearance.FACE_SLIDERS}),
+               "presets": {k: v["desc"] for k, v in appearance.FACE_PRESETS.items()},
+               "usage": "ccreator face set nose.width=0.4 jaw.width=-0.3 | face preset angular | "
+                        "face randomize --seed 7 --strength 0.6 | face reset"}
+        try:
+            out["current"] = _face_summary(specmod.load(_project(a)))["shape"]
+        except CliError:
+            pass
+        return out
+    p = _project(a)
+    s = specmod.load(p)
+    face = s.setdefault("face", {"blendshapes": "arkit52"})
+    shape = dict(face.get("shape") or {})
+    if a.action == "set":
+        vals = _assignments(a.values)
+        if not vals:
+            raise CliError("missing_arg", "face set needs slider=value pairs", hint="e.g. face set nose.width=0.4")
+        for k, v in vals.items():
+            if v is None or v == 0:
+                appearance.clamp(k, 0)
+                shape.pop(k, None)
+            else:
+                shape[k] = appearance.clamp(k, v)
+    elif a.action == "preset":
+        if not a.values:
+            raise CliError("missing_arg", "face preset needs a name", hint=f"Valid: {', '.join(appearance.FACE_PRESETS)}")
+        new = {}
+        for name in a.values:
+            for k, v in appearance.preset_shape(name, a.amount).items():
+                new[k] = new.get(k, 0) + v
+        shape = _merge(shape, new, a.add)
+    elif a.action == "randomize":
+        groups = _parse_list(a.groups)
+        bad = [g for g in groups or [] if g not in {k.split(".")[0] for k in appearance.FACE_SLIDERS}]
+        if bad:
+            raise CliError("bad_group", f"Unknown face group(s): {', '.join(bad)}",
+                           hint="Groups: " + ", ".join(sorted({k.split('.')[0] for k in appearance.FACE_SLIDERS})))
+        if not 0 <= a.strength <= 1:
+            raise CliError("bad_value", "--strength must be 0..1", hint="0.3 subtle, 0.5 natural, 1 extreme")
+        seed = a.seed if a.seed is not None else int.from_bytes(os.urandom(3), "big")
+        new = appearance.random_shape(seed, a.strength, groups)
+        if groups and not a.add:
+            shape = {k: v for k, v in shape.items() if k.split(".")[0] not in groups}
+            a.add = True
+        shape = _merge(shape, new, a.add)
+        face["seed"] = seed
+    elif a.action == "reset":
+        groups = _parse_list(a.groups)
+        shape = {k: v for k, v in shape.items() if groups and k.split(".")[0] not in groups}
+    face["shape"] = shape
+    specmod.save(p, s)
+    out = _face_summary(s)
+    if a.action == "randomize":
+        out["seed"] = face["seed"]
+    out["tip"] = "Check it with `ccreator render --focus head --views front,three_quarter,side`"
+    return out
+
+
+def _merge(shape, new, add):
+    if not add:
+        return new
+    out = dict(shape)
+    for k, v in new.items():
+        out[k] = appearance.clamp(k, out.get(k, 0) + v)
+    return {k: v for k, v in out.items() if abs(v) > 1e-4}
+
+
+def cmd_eyes(a):
+    p = _project(a)
+    s = specmod.load(p)
+    if a.color:
+        s["eyes"]["iris_color"] = specmod.color(a.color, "color", "eyes")
+    shape = s.setdefault("face", {}).setdefault("shape", {})
+    for k, v in _assignments(a.values, "eyes.").items():
+        if v is None or v == 0:
+            appearance.clamp(k, 0)
+            shape.pop(k, None)
+        else:
+            shape[k] = appearance.clamp(k, v)
+    specmod.save(p, s)
+    return {"eyes": s["eyes"], "shape": {k: v for k, v in sorted(shape.items()) if k.startswith("eyes.")},
+            "sliders": {k: d for k, (d, _, _) in appearance.FACE_SLIDERS.items() if k.startswith("eyes.")}}
+
+
+def cmd_brows(a):
+    p = _project(a)
+    s = specmod.load(p)
+    sk = s["skin"]
+    if a.preset:
+        if a.preset not in appearance.BROW_PRESETS:
+            raise CliError("unknown_brow_preset", f"Unknown eyebrow preset '{a.preset}'",
+                           hint=f"Valid: {', '.join(appearance.BROW_PRESETS)}")
+        sk.update(appearance.BROW_PRESETS[a.preset])
+    for key in appearance.BROW_KEYS:
+        v = getattr(a, key[len("brow_"):])
+        if v is not None:
+            sk[key] = appearance.check_brow(key, v)
+    if a.color:
+        sk["brow_color"] = None if a.color in ("hair", "none") else specmod.color(a.color, "color", "hair")
+    if a.off or a.on:
+        sk["brows"] = bool(a.on)
+    shape = s.setdefault("face", {}).setdefault("shape", {})
+    for k, v in _assignments(a.values, "brows.").items():
+        if v is None or v == 0:
+            appearance.clamp(k, 0)
+            shape.pop(k, None)
+        else:
+            shape[k] = appearance.clamp(k, v)
+    specmod.save(p, s)
+    return {"brows": {k: sk.get(k, appearance.BROW_KEYS[k][0] if k in appearance.BROW_KEYS else None)
+                      for k in ["brows", "brow_color", *appearance.BROW_KEYS]},
+            "brow_color_used": sk.get("brow_color") or (s.get("hair") or {}).get("color"),
+            "ridge_shape": {k: v for k, v in sorted(shape.items()) if k.startswith("brows.")},
+            "presets": list(appearance.BROW_PRESETS)}
 
 
 def cmd_animations(a):
@@ -457,11 +611,18 @@ def cmd_schema(a):
 SCHEMA = {
     "init <dir> [--preset P] [--name N] [--force]": "create a project with character.json",
     "show": "print the spec and last build manifest",
-    "set <path>=<value> ...": "edit the spec: body.macros.<slider>, body.morphs.<modifier>, body.height_cm, skin.*, eyes.iris_color, name",
+    "set <path>=<value> ...": "edit the spec: body.macros.<slider>, body.morphs.<modifier>, face.shape.<slider>, body.height_cm, skin.*, eyes.iris_color, name",
     "catalog [section]": "presets, body sliders, hair styles, garment types",
     "morphs [--group G] [--search S]": "list the detailed morph modifiers (face, torso, limbs...)",
-    "skin [--color HEX] [--texture PNG|''] [--brow-color HEX]": "skin tone or a painted skin texture (body UV template)",
-    "hair set <style> [--color HEX] [--texture PNG]": "procedural hair style",
+    "skin [--color HEX|NAME] [--texture PNG|''] [--brow-color HEX|NAME]": "whole-body skin tone (names: `catalog colors`) or a painted skin texture (body UV template)",
+    "face list [--group G]": "face shape sliders (head, forehead, brows, eyes, nose, mouth, jaw, chin, cheeks, ears, neck), presets, current values",
+    "face set <slider>=<value> ...": "set face sliders, e.g. nose.width=0.4 jaw.width=-0.3 (bipolar -1..1, head shapes 0..1; 0 removes)",
+    "face preset <name...> [--amount F] [--add]": "apply a face archetype (angular, soft, round, long, heart, square, delicate, rugged, aquiline, broad)",
+    "face randomize [--seed N] [--strength 0..1] [--groups nose,eyes] [--add]": "random plausible face; same seed = same face",
+    "face reset [--groups G,...]": "clear face sliders (all, or only some groups)",
+    "eyes [--color HEX|NAME] [size=.. tilt=.. openness=.. spacing=.. monolid=.. ...]": "iris colour and eye shape (the eyes.* face sliders)",
+    "brows [--preset P] [--color HEX|NAME|hair] [--thickness F] [--arch F] [--density F] [--length F] [--on|--off] [height=.. tilt=.. ridge=..]": "eyebrow hair shape and colour, and the brow ridge sliders",
+    "hair set [style] [--color HEX|NAME] [--texture PNG]": "procedural hair style; with only --color, recolours the current hair",
     "hair import --file MESH [--color HEX] [--texture PNG]": "custom hair mesh authored on the reference body",
     "hair remove": "bald",
     "garment add <type> [--id ID] [--color HEX] [--texture PNG] [--layer N] [--keep-slot]": "add a standard garment (replaces others in its slot unless --keep-slot)",
@@ -502,6 +663,27 @@ def parser():
     x.add_argument("--color")
     x.add_argument("--texture")
     x.add_argument("--brow-color")
+
+    x = sp.add_parser("face")
+    x.add_argument("action", choices=["list", "set", "preset", "randomize", "reset"])
+    x.add_argument("values", nargs="*")
+    x.add_argument("--group")
+    x.add_argument("--groups")
+    x.add_argument("--seed", type=int)
+    x.add_argument("--strength", type=float, default=0.5)
+    x.add_argument("--amount", type=float, default=1.0)
+    x.add_argument("--add", action="store_true", help="add to the current sliders instead of replacing them")
+    x = sp.add_parser("eyes")
+    x.add_argument("values", nargs="*")
+    x.add_argument("--color")
+    x = sp.add_parser("brows")
+    x.add_argument("values", nargs="*")
+    x.add_argument("--preset")
+    x.add_argument("--color")
+    for k in ("thickness", "arch", "density", "length"):
+        x.add_argument("--" + k, type=float)
+    x.add_argument("--on", action="store_true")
+    x.add_argument("--off", action="store_true")
 
     x = sp.add_parser("hair")
     x.add_argument("action", choices=["set", "import", "remove"])
@@ -570,7 +752,7 @@ def parser():
 
 COMMANDS = {
     "init": cmd_init, "show": cmd_show, "set": cmd_set, "catalog": cmd_catalog, "morphs": cmd_morphs,
-    "skin": cmd_skin, "hair": cmd_hair, "garment": cmd_garment, "template": cmd_template, "build": cmd_build,
+    "skin": cmd_skin, "face": cmd_face, "eyes": cmd_eyes, "brows": cmd_brows, "hair": cmd_hair, "garment": cmd_garment, "template": cmd_template, "build": cmd_build,
     "render": cmd_render, "animations": cmd_animations, "reference-body": cmd_reference_body,
     "autorig": cmd_autorig, "validate": cmd_validate, "schema": cmd_schema,
 }
@@ -590,7 +772,7 @@ def main(argv=None):
         return emit({"ok": False, "error": {"code": "bad_arguments", "message": "Invalid command line",
                                             "hint": "Run `ccreator schema` or `ccreator <command> --help`"}}, 2)
     try:
-        if a.cmd == "hair" and a.action == "set" and not a.style:
+        if a.cmd == "hair" and a.action == "set" and not a.style and not a.color:
             raise CliError("missing_arg", "hair set needs a style", hint=f"Valid: {', '.join(catalog.HAIR_STYLES)}")
         if a.cmd == "garment" and a.action in ("add",) and not a.type:
             raise CliError("missing_arg", "garment add needs a type", hint=f"Valid: {', '.join(catalog.GARMENTS)}")

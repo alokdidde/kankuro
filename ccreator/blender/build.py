@@ -8,6 +8,7 @@ from mathutils import Vector, interpolate
 from mathutils.bvhtree import BVHTree
 
 from .. import catalog, face, morph, textures
+from .. import spec as specmod
 from ..errors import CliError
 from . import anim, body, garments, hair, materials, rig, util
 
@@ -324,7 +325,7 @@ def build_scene(spec, project, work_dir):
     garments._UV_CACHE.clear()
     bd = spec["body"]
     blendshapes = face.SETS[spec.get("face", {}).get("blendshapes", "arkit52")]
-    res = body.build(bd.get("macros"), bd.get("morphs"), bd.get("height_cm"), face_keys=blendshapes)
+    res = body.build(bd.get("macros"), specmod.effective_morphs(spec), bd.get("height_cm"), face_keys=blendshapes)
     b.arm = res.arm
     b.res = res
     t = _tick(b, "body", t)

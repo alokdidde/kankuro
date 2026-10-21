@@ -44,6 +44,10 @@ def target_names():
     return sorted({k[:-2] for k in targets().files})
 
 
+# MakeHuman's eye targets move only a millimetre or two at full strength, so they may be pushed past 1.
+OVERDRIVE = {"eyes": 2.0}
+
+
 @lru_cache(maxsize=1)
 def modifier_catalog():
     """Detailed (non-macro) modifiers: name -> {targets: {side: target}, range: [min, max], group}."""
@@ -58,7 +62,8 @@ def modifier_catalog():
             if m.get("min") and m.get("max"):
                 lo, hi = f"{g}/{t}-{m['min']}", f"{g}/{t}-{m['max']}"
                 if lo in names and hi in names:
-                    cat[f"{g}/{t}-{m['min']}|{m['max']}"] = {"group": g, "decr": lo, "incr": hi, "range": [-1.0, 1.0]}
+                    r = OVERDRIVE.get(g, 1.0)
+                    cat[f"{g}/{t}-{m['min']}|{m['max']}"] = {"group": g, "decr": lo, "incr": hi, "range": [-r, r]}
             else:
                 full = f"{g}/{t}"
                 if full in names:

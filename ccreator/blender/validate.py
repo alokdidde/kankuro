@@ -70,5 +70,9 @@ def check(path):
         add("arkit_blendshapes", not missing_shapes,
             {"found": len(shape_names), "missing": missing_shapes,
              "meshes": [o.name for o in meshes if o.data.shape_keys]})
+        # default morph weights must be 0, or engines show every expression at once
+        on = sorted({kb.name for o in meshes if o.data.shape_keys
+                     for kb in o.data.shape_keys.key_blocks[1:] if abs(kb.value) > 1e-3})
+        add("blendshapes_at_rest", not on, {"nonzero_default_weights": on[:10], "count": len(on)})
     acts = [a.name for a in bpy.data.actions]
     return {"glb": path, "valid": all(c["pass"] for c in checks), "checks": checks, "animations": acts}
