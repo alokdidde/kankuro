@@ -53,28 +53,48 @@ def _target_mask(names):
     return m
 
 
-def _brow_mask():
-    """Per-vertex brow strength: an arc above each eye on the front of the neutral base face."""
+def brow_arc(u, e, r, arch=0.0):
+    """Height of the brow line above eye centre e (eye radius r) at u (-1 inner end .. +1 outer end)."""
+    u = np.asarray(u, dtype=float)
+    up = np.clip(u, 0, None)
+    z = e[2] + r * (1.45 + 0.35 * (1 - u ** 2)) - r * 0.25 * np.clip(up, 0, 1)
+    return z + r * 0.3 * arch * np.clip(1 - (u - 0.3) ** 2 / 1.69, 0, None)
+
+
+def brow_thick(u, r, thickness=1.0):
+    """Half-height of the brow band at u."""
+    u = np.asarray(u, dtype=float)
+    return r * (0.29 - 0.15 * np.clip(u, 0, 1)) * np.where(u < -0.6, 1.15, 1.0) * thickness
+
+
+def eye_frame_base(side):
+    """Centre and radius of an eye on the neutral base mesh."""
     b = morph.base()
     co = b["coords"].astype(float)
     names = list(b["group_names"])
     sizes = b["face_sizes"]
     starts = np.concatenate([[0], np.cumsum(sizes)[:-1]])
+    gid = names.index(f"helper-{side}-eye")
+    fids = np.nonzero(b["face_group"] == gid)[0]
+    vs = np.unique(np.concatenate([b["face_verts"][starts[f]:starts[f] + sizes[f]] for f in fids]))
+    return co[vs].mean(0), np.ptp(co[vs][:, 0]) / 2
+
+
+def _brow_mask(thickness=1.0, arch=0.0, length=1.0):
+    """Per-vertex brow strength on the neutral base face: the band the brow hairs
+    (blender/hair_cards.brows) are rooted in, so paint and hairs always coincide."""
+    co = morph.base()["coords"].astype(float)
     m = np.zeros(len(co))
     body = np.unique(np.concatenate(morph.faces_of_group("body")[0]))
     for side in ("l", "r"):
-        gid = names.index(f"helper-{side}-eye")
-        fids = np.nonzero(b["face_group"] == gid)[0]
-        vs = np.unique(np.concatenate([b["face_verts"][starts[f]:starts[f] + sizes[f]] for f in fids]))
-        e = co[vs].mean(0)
-        r = np.ptp(co[vs][:, 0]) / 2  # eye radius
+        e, r = eye_frame_base(side)
         p = co[body]
         dx = (p[:, 0] - e[0]) * (1 if side == "l" else -1)  # + towards the temple
         u = dx / (r * 2.1)  # -1 inner end .. +1 outer end
-        arc = e[2] + r * (1.45 + 0.35 * (1 - u ** 2)) - r * 0.25 * np.clip(u, 0, 1)
-        thick = r * (0.32 - 0.12 * np.clip(u, 0, 1))
-        w = np.exp(-((p[:, 2] - arc) / thick) ** 2) * (np.abs(u) < 1.05) * (p[:, 1] < e[1] + r * 0.3)
-        w *= np.clip((1.05 - np.abs(u)) * 4, 0, 1)
+        arc = brow_arc(u, e, r, arch)
+        thick = brow_thick(u, r, thickness) * 1.1
+        w = np.exp(-((p[:, 2] - arc) / thick) ** 2) * (u > -0.97) * (u < length + 0.05) * (p[:, 1] < e[1] + r * 0.3)
+        w *= np.clip((1.05 + u) * 4, 0, 1) * np.clip((length + 0.05 - u) * 4 / max(length, 0.3), 0, 1)
         m[body] = np.maximum(m[body], w)
     return m
 
@@ -96,10 +116,11 @@ def _blur(a, r=2):
     return np.apply_along_axis(lambda x: np.convolve(x, k, mode="same"), 1, a)
 
 
-def skin_texture(skin_hex, out, size=1024, lips=True, brows=True, brow_hex=None, scalp=None, scalp_hex=None):
+def skin_texture(skin_hex, out, size=1024, lips=True, brows=True, brow_hex=None, scalp=None, scalp_hex=None,
+                 brow_shape=None):
     """Flat skin tone with soft lips and brows painted on the MakeHuman body UV layout.
 
-    scalp: optional per base-vertex weight (hair.scalp_mask) tinted towards scalp_hex, with a speckled
+    scalp: optional per base-vertex weight (hair.coverage_mask) tinted towards scalp_hex, with a speckled
     edge, so the hairline reads as hair growing out of the skin rather than a layer laid on top."""
     from .blender_free import hex_rgb
     tone = np.array(hex_rgb(skin_hex))
@@ -118,7 +139,7 @@ def skin_texture(skin_hex, out, size=1024, lips=True, brows=True, brow_hex=None,
         lip_col = tone * np.array([0.82, 0.55, 0.55])
         img = img * (1 - 0.75 * lip) + lip_col * 0.75 * lip
     if brows:
-        m = _brow_mask()
+        m = _brow_mask(**(brow_shape or {}))
         br = raster_scalar(tuv, m[tv], size)
         # only a faint shadow under the brow hairs (blender/hair_cards.brows); a solid paint reads as a smudge
         br = _blur(br, 2)[..., None]

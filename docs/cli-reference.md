@@ -460,8 +460,11 @@ kankuro hair remove
 | `short` | short layered cut with some volume |
 | `bob` | chin-length bob |
 | `long` | straight, past the shoulders |
-| `ponytail` | pulled back into a ponytail |
-| `bun` | pulled back into a bun |
+| `ponytail` | centre parting, pulled back into a ponytail |
+| `bun` | centre parting, pulled back into a bun |
+| `indian_braid` | centre parting, pulled back into one long three-strand plait down the back |
+| `french_braid` | French braid woven from the forehead down the back of the head, then hanging |
+| `indian_loose` | long, loose, slightly wavy hair with a centre parting, past the shoulder blades |
 | `afro` | big rounded afro |
 | `mohawk` | shaved sides, tall centre crest |
 
@@ -470,7 +473,10 @@ kankuro hair remove
 Procedural hair is a mesh named `Hair` with two materials: `HairBase`, an opaque layer that gives the
 hair its volume (slightly darker, so gaps read as depth), and `Hair`, the **cards**: narrow ribbons with
 an RGBA strand texture, grown along the style's combing direction (out from the crown, away from a
-parting, or back to the ponytail/bun) in overlapping layers. Cards shade with the normals of the hair
+parting, back to the ponytail/bun, or into the braid) in overlapping layers. Braids are three woven
+strands, each with its own short cards running along it. The hairline is shaped like a real one (a
+slight centre dip, receding temples, down in front of the ear), parted styles have an actual parting
+line of scalp, and the scalp under the hair is tinted so the hair seems to grow out of the skin. Cards shade with the normals of the hair
 volume, use an anisotropic highlight, and export as glTF `alphaMode: MASK` (no sorting problems in
 game engines). `buzz` has no cards (fine stubble texture on the base layer).
 

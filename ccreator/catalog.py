@@ -5,9 +5,13 @@
 # combing direction, in overlapping layers.
 #   offset: gap above the scalp; thickness: (unused by cards, kept for imported specs);
 #   length: how far side/back hair falls below the hairline (metres, 0 = none);
-#   extras: added shapes (ponytail, bun); crest: mohawk strip half-width
+#   extras: added shapes (ponytail, bun, braid, french_braid); crest: mohawk strip half-width
 #   flow: combing direction: "crown" (out from the crown), "part" (away from a parting at x=`part`, then
-#         down), "back" (pulled back to the ponytail/bun, or the nape)
+#         down), "back" (pulled back to the ponytail/bun/braid, or the nape; with `part`, combed sideways
+#         off a front parting first), "braid" (into a French braid along the top of the head)
+#   part: x of a parting line (cut into the scalp layer); hairline: (front, side, back) heights as
+#         fractions of neck..crown; temple: how far the hairline recedes at the temples
+#   braid_width / braid_length / braid_period: plait half-width, hanging length and weave period (m)
 #   card_len / card_width: typical card size; card_lift: how far cards stack above the base;
 #   card_density: layers of cover; curl: strand wave amplitude (radians); cards: False = base layer only
 HAIR_STYLES = {
@@ -22,10 +26,22 @@ HAIR_STYLES = {
              "flow": "part", "part": 0.0, "card_len": 0.24, "card_width": 0.02, "card_lift": 0.006,
              "card_density": 5.0},
     "ponytail": {"desc": "Pulled back with a ponytail", "offset": 0.006, "thickness": 0.006, "length": 0.0,
-                 "extras": ["ponytail"], "flow": "back", "card_len": 0.12, "card_width": 0.016,
+                 "extras": ["ponytail"], "flow": "back", "part": 0.0, "card_len": 0.12, "card_width": 0.016,
                  "card_lift": 0.004, "card_density": 5.0},
     "bun": {"desc": "Pulled back into a bun", "offset": 0.006, "thickness": 0.006, "length": 0.0, "extras": ["bun"],
-            "flow": "back", "card_len": 0.10, "card_width": 0.016, "card_lift": 0.004, "card_density": 5.0},
+            "flow": "back", "part": 0.0, "card_len": 0.10, "card_width": 0.016, "card_lift": 0.004, "card_density": 5.0},
+    "indian_braid": {"desc": "Centre parting, pulled back into one long plait down the back", "offset": 0.006,
+                     "thickness": 0.006, "length": 0.0, "extras": ["braid"], "flow": "back", "part": 0.0,
+                     "hairline": (0.74, 0.55, 0.14), "braid_width": 0.015, "braid_length": 0.42,
+                     "braid_period": 0.05, "card_len": 0.12, "card_width": 0.016, "card_lift": 0.004,
+                     "card_density": 5.0},
+    "french_braid": {"desc": "French braid woven from the forehead down the back of the head, then hanging",
+                     "offset": 0.006, "thickness": 0.006, "length": 0.0, "extras": ["french_braid"],
+                     "flow": "braid", "braid_width": 0.016, "braid_length": 0.22, "braid_period": 0.045,
+                     "card_len": 0.09, "card_width": 0.016, "card_lift": 0.004, "card_density": 5.0},
+    "indian_loose": {"desc": "Long, loose, slightly wavy hair with a centre parting, past the shoulder blades",
+                     "offset": 0.01, "thickness": 0.008, "length": 0.44, "flow": "part", "part": 0.0,
+                     "card_len": 0.3, "card_width": 0.022, "card_lift": 0.007, "card_density": 5.5, "curl": 0.12},
     "afro": {"desc": "Big rounded afro", "offset": 0.055, "thickness": 0.02, "length": 0.0, "round": 0.8,
              "flow": "crown", "card_len": 0.05, "card_width": 0.02, "card_lift": 0.012, "card_density": 3.5,
              "curl": 0.6, "card_jitter": 0.6},

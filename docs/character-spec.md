@@ -112,7 +112,7 @@ or an imported mesh:
 {"style": "custom", "source": "assets/meshes/braids.glb", "color": "#2a1a10", "texture": null}
 ```
 
-`style` is one of `buzz`, `short`, `bob`, `long`, `ponytail`, `bun`, `afro`, `mohawk`, or `custom`
+`style` is one of `buzz`, `short`, `bob`, `long`, `ponytail`, `bun`, `indian_braid`, `french_braid`, `indian_loose`, `afro`, `mohawk`, or `custom`
 with a `source`.
 
 ### `garments[]`

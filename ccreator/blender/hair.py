@@ -30,32 +30,53 @@ def _theta(p, yc):
 
 
 def _hairline(theta, z_ref, z_top, style):
-    c = (1 + math.cos(theta)) / 2  # 1 front, 0 back
+    """Height of the hairline around the head (theta 0 at the face, +/-pi at the back).
+
+    Not a plain arch: the centre dips a little, the hair recedes at the temples (the "M" of a real
+    hairline), comes down again in front of the ear and rises over it before dropping to the nape."""
     front, side, back = style.get("hairline", (0.74, 0.55, 0.1))
-    # piecewise blend: front->side for |theta|<90deg, side->back beyond
-    if c >= 0.5:
-        k = (c - 0.5) * 2
-        f = side + (front - side) * k
-    else:
-        k = c * 2
-        f = back + (side - back) * k
-    return z_ref + (z_top - z_ref) * f
+    temple = style.get("temple", 0.05)
+    deg = abs(math.degrees(theta))
+    f = np.interp(deg, [0, 18, 38, 58, 78, 95, 130, 180],
+                  [front - 0.015, front, front + temple, (front + side) / 2 + temple * 0.6,
+                   side - 0.04, side, (side + back) / 2, back])
+    return z_ref + (z_top - z_ref) * float(f)
 
 
-def scalp_mask(res, style_name, inside=0.012, outside=0.001):
-    """Per base-vertex weight of the scalp under a procedural style: 1 under the hair, fading to 0 a few
-    millimetres below the hairline. Painted into the skin so the hair seems to grow out of it."""
-    style = catalog.HAIR_STYLES[style_name]
-    hv = np.nonzero(res.W[:, res.bones.index("head")] > 0.5)[0]
+def coverage_mask(res, hair_obj, smooth=2):
+    """Per base-vertex weight of the scalp actually under hair_obj's base layer (material 0): 1 where a ray
+    out of the skin meets the hair, softened over a couple of mesh rings. It follows the hair as built
+    (tapers, a pulled-up nape), so the tint never shows as a band below the hair."""
+    from mathutils.bvhtree import BVHTree
+    from .. import morph
+    hco = util.get_coords(hair_obj)
+    faces = [list(p.vertices) for p in hair_obj.data.polygons if p.material_index == 0]
+    if not faces:
+        return None
+    bvh = BVHTree.FromPolygons([Vector(p) for p in hco], faces)
     co = res.coords
-    z_ref = res.arm.data.bones["head"].head_local.z
-    z_top = co[hv, 2].max()
-    yc = co[hv, 1].mean()
+    nrm = np.zeros_like(co)
+    edges = []
+    for f in morph.faces_of_group("body")[0]:
+        f = list(f)
+        for k in range(1, len(f) - 1):
+            n = np.cross(co[f[k]] - co[f[0]], co[f[k + 1]] - co[f[0]])
+            nrm[[f[0], f[k], f[k + 1]]] += n
+        edges += [(f[k], f[(k + 1) % len(f)]) for k in range(len(f))]
+    nrm /= np.linalg.norm(nrm, axis=1, keepdims=True) + 1e-12
     m = np.zeros(len(co))
-    for i in hv:
-        p = co[i]
-        d = p[2] - _hairline(_theta(p, yc), z_ref, z_top, style)
-        m[i] = np.clip((d + outside) / (inside + outside), 0, 1)
+    head = (res.W[:, res.bones.index("head")] > 0.5) & (np.abs(nrm).sum(1) > 0)  # not the shoulders under long hair
+    for i in np.nonzero(head)[0]:
+        n = Vector(nrm[i])
+        hit = bvh.ray_cast(Vector(co[i]) - n * 0.002, n, 0.06)
+        m[i] = hit[0] is not None
+    edges = np.array(edges)
+    deg = np.bincount(edges.ravel(), minlength=len(co)) / 2 + 1.0
+    for _ in range(smooth):
+        acc = m.copy()
+        np.add.at(acc, edges[:, 0], m[edges[:, 1]] * 0.5)
+        np.add.at(acc, edges[:, 1], m[edges[:, 0]] * 0.5)
+        m = acc / deg
     return m
 
 
@@ -77,6 +98,8 @@ def _cap(res, body_obj, style, name):
     bm = bmesh.new()
     bm.from_mesh(obj.data)
     garments._largest_components(bm, min_frac=0.2)
+    # pinholes in the scalp selection would become bald spots once the hairline edge is trimmed
+    bmesh.ops.holes_fill(bm, edges=[e for e in bm.edges if e.is_boundary], sides=16)
     bm.to_mesh(obj.data)
     bm.free()
     sub = obj.modifiers.new("sub", "SUBSURF")
@@ -257,12 +280,122 @@ def _torus(name, centre, axis, R, r, segs=16, ring=8):
     return bmesh_obj
 
 
-def _extras(style, cap, yc, z_ref, z_top):
-    """Ponytail/bun shapes, plus the point the hair is pulled back to (None if nothing ties it)."""
+def _hang(bvh, start, length, clear, direction=(0, 0.25, -1), step=0.01):
+    """A path falling from start under gravity that keeps `clear` metres off the body (down the back)."""
+    pts = [Vector(start)]
+    d = Vector(direction).normalized()
+    down = Vector((0, 0, -1))
+    for _ in range(int(length / step)):
+        p = pts[-1] + d * step
+        loc, nrm, _, _ = bvh.find_nearest(p)
+        if loc is not None:
+            h = (p - loc).dot(nrm)
+            if h < clear:
+                p = p + nrm * (clear - h)
+        d = ((p - pts[-1]).normalized() * 0.6 + down * 0.4).normalized()
+        pts.append(p)
+    return pts
+
+
+def _frames(pts, out_hint):
+    """Tangent, out (away from the head/body) and side axes along a path."""
+    T, N, S = [], [], []
+    for i, p in enumerate(pts):
+        t = (pts[min(i + 1, len(pts) - 1)] - pts[max(i - 1, 0)]).normalized()
+        o = Vector(out_hint[i]) if hasattr(out_hint[0], "__len__") else Vector(out_hint)
+        n = (o - t * o.dot(t)).normalized()
+        T.append(t)
+        N.append(n)
+        S.append(n.cross(t).normalized())
+    return T, N, S
+
+
+def _braid(pts, normals, width, period, prefix="hair_strand"):
+    """A three-strand plait along pts: one tube per strand, weaving side to side and over/under
+    (x = A sin(phi), out = B sin(2 phi), strands a third of a turn apart). width(s) is the plait's
+    half-width at arc length s; the strands carry their own combing direction, so cards follow them."""
+    arc = [0.0]
+    for a, b in zip(pts[:-1], pts[1:]):
+        arc.append(arc[-1] + (b - a).length)
+    total = arc[-1]
+    # resample densely enough for the weave
+    n = max(8, int(total / (period / 18)))
+    ss = np.linspace(0, total, n)
+    P = [Vector(np.array([np.interp(s, arc, [p[k] for p in pts]) for k in range(3)])) for s in ss]
+    Nn = [Vector(np.array([np.interp(s, arc, [q[k] for q in normals]) for k in range(3)])) for s in ss]
+    T, N, S = _frames(P, Nn)
+    objs = []
+    for k in range(3):
+        cs, rs = [], []
+        for i, s in enumerate(ss):
+            A = width(s / total)
+            phi = 2 * math.pi * s / period + 2 * math.pi * k / 3
+            cs.append(P[i] + S[i] * (A * math.sin(phi)) + N[i] * (0.38 * A * math.sin(2 * phi)))
+            rs.append(A * 0.52)
+        objs.append(_tube(f"{prefix}_{k}", cs, rs, segs=12))
+    return objs
+
+
+def _extras(style, cap, body_obj, yc, z_ref, z_top):
+    """Ponytail/bun/braid shapes, the point the hair is pulled back to (None if nothing ties it) and,
+    for a French braid, the line on the scalp the hair is gathered into."""
     co = util.get_coords(cap)
-    objs, tie = [], None
+    objs, tie, line = [], None, None
     hh = z_top - z_ref
     for kind in style.get("extras", []):
+        if kind == "braid":
+            # a single plait from the nape down the back (the Indian "choti"), tied off near the end
+            bvh = garments.body_bvh(body_obj)
+            start = Vector((0, co[:, 1].max() - 0.01, z_ref + hh * 0.3))
+            A = style.get("braid_width", 0.015)
+            pts = _hang(bvh, start, style.get("braid_length", 0.42), A * 1.4 + 0.012)
+            nrm = [Vector((0, 1, 0))] * len(pts)
+            objs += _braid(pts, nrm, lambda t: A * (1.0 - 0.5 * t), style.get("braid_period", 0.05))
+            end, d = pts[-1], (pts[-1] - pts[-2]).normalized()
+            objs.append(_torus("hair_tie_end", end, d, A * 0.55 + 0.002, 0.003))
+            tail = [end + d * (0.008 * k) for k in range(7)]
+            objs.append(_tube("hair_strand_tail", tail, [A * 0.5, A * 0.55, A * 0.6, A * 0.6, A * 0.5, A * 0.3,
+                                                         0.002], segs=12))
+            tie = np.array(start)
+        elif kind == "french_braid":
+            # woven along the top and back of the head from the forehead, gathering hair from the sides,
+            # then hanging free from the nape
+            from mathutils.bvhtree import BVHTree
+            faces = [list(p.vertices) for p in cap.data.polygons]
+            cbvh = BVHTree.FromPolygons([Vector(p) for p in co], faces)
+            c = Vector((0, yc, (z_ref + z_top) / 2))
+            A0, A1 = style.get("braid_width", 0.016) * 0.35, style.get("braid_width", 0.016)
+            pts, nrms = [], []
+            for al in np.linspace(math.radians(-24), math.radians(128), 40):
+                d = Vector((0, math.sin(al), math.cos(al)))
+                hit = cbvh.ray_cast(c + d * 0.3, -d, 0.3)
+                if hit[0] is None:
+                    continue
+                n = (hit[0] - c).normalized()
+                pts.append(hit[0])
+                nrms.append(n)
+            k_scalp = len(pts)
+            line = np.array([tuple(p) for p in pts])
+            bvh = garments.body_bvh(body_obj)
+            hang = _hang(bvh, pts[-1], style.get("braid_length", 0.22), A1 * 1.4 + 0.012)[1:]
+            pts += hang
+            nrms += [Vector((0, 1, 0))] * len(hang)
+            frac = k_scalp / len(pts)
+
+            def width(t):  # starts from nothing, grows as hair is taken in along the head, tapers down the hang
+                if t < frac:
+                    return (A0 + (A1 - A0) * t / frac) * min(1.0, 0.15 + t / 0.12)
+                return A1 * (1 - 0.45 * (t - frac) / (1 - frac))
+            # the scalp part sits on the hair: lift each lobe by its own thickness
+            lifted = [p + n * (width(i / len(pts)) * 0.15) if i < k_scalp else p
+                      for i, (p, n) in enumerate(zip(pts, nrms))]
+            objs += _braid(lifted, nrms, width, style.get("braid_period", 0.045))
+            end, d = pts[-1], (pts[-1] - pts[-2]).normalized()
+            objs.append(_torus("hair_tie_end", end, d, A1 * 0.55 * 0.55 + 0.002, 0.003))
+            tail = [end + d * (0.008 * k) for k in range(6)]
+            objs.append(_tube("hair_strand_tail", tail, [A1 * 0.3, A1 * 0.33, A1 * 0.35, A1 * 0.3, A1 * 0.2,
+                                                         0.002], segs=12))
+            tie = np.array(pts[k_scalp - 1])
         if kind == "ponytail":
             # out of the back of the head, then a smooth bend into the hanging tail
             base = Vector((0, co[:, 1].max() - 0.012, z_ref + hh * 0.55))
@@ -296,20 +429,39 @@ def _extras(style, cap, yc, z_ref, z_top):
             hair_cards.set_flow(o, swirl / (np.linalg.norm(swirl, axis=1, keepdims=True) + 1e-9))
             objs.append(o)
             tie = c - np.array([0, 0.03, 0])
-    return objs, tie
+    return objs, tie, line
 
 
-def _cap_flow(co, style, yc, z_ref, z_top, tie):
+def _cap_flow(co, style, yc, z_ref, z_top, tie, line=None):
     """Combing direction over the scalp cap."""
     kind = style.get("flow", "crown")
     hh = z_top - z_ref
+    if kind == "braid" and line is not None:
+        # into the nearest point of the braid, turning along it as the hair joins in
+        d = co[:, None, :] - line[None, :, :]
+        j = np.argmin((d ** 2).sum(-1), axis=1)
+        to = line[j] - co
+        dist = np.linalg.norm(to, axis=1, keepdims=True)
+        along = line[np.minimum(j + 1, len(line) - 1)] - line[np.maximum(j - 1, 0)]
+        along /= np.linalg.norm(along, axis=1, keepdims=True) + 1e-9
+        f = to / (dist + 1e-9) + along * (0.4 + 1.5 * np.clip(1 - dist / 0.03, 0, 1))
+        return f / (np.linalg.norm(f, axis=1, keepdims=True) + 1e-9)
     if kind == "back":
         if tie is None:
             tie = np.array([0, yc + 0.12, z_ref + 0.2 * hh])
         d = tie[None, :] - co
         r = np.linalg.norm(d, axis=1, keepdims=True)
+        f = d / (r + 1e-9)
+        if style.get("part") is not None:
+            # parted, then pulled back: the front is combed sideways off the part line before it turns
+            # back towards the tie, so the front doesn't read as one smooth dome
+            xp = style["part"]
+            front = np.clip((yc + 0.02 - co[:, 1]) / 0.07, 0, 1)
+            side = np.sign(co[:, 0] - xp + 1e-6) * np.exp(-np.abs(co[:, 0] - xp) / 0.025)
+            f[:, 0] += 1.6 * front * side
+            f /= np.linalg.norm(f, axis=1, keepdims=True) + 1e-9
         # cards run into the ponytail/bun and carry on along it; only right at the tie point is there no direction
-        return d / (r + 1e-9) * np.clip((r - 0.005) / 0.01, 0, 1)
+        return f * np.clip((r - 0.005) / 0.01, 0, 1)
     if kind == "part":
         xp = style.get("part", 0.0)
         line = np.stack([np.full(len(co), xp), co[:, 1], np.full(len(co), z_top + 0.02)], axis=1)
@@ -397,6 +549,33 @@ def skin_hair(obj, res, body_obj):
     util.set_weight_matrix(obj, W, res.bones)
 
 
+def _cut_part(obj, xp, y_max):
+    """Open a parting: drop the strip of faces straddling x = xp in front of y_max. The strip's edges then
+    taper onto the scalp and get hairline cards like any other hairline."""
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    kill = []
+    for f in bm.faces:
+        xs = [v.co.x - xp for v in f.verts]
+        if min(xs) < 0 < max(xs) and f.calc_center_median().y < y_max:
+            kill.append(f)
+    bmesh.ops.delete(bm, geom=kill, context="FACES")
+    bm.to_mesh(obj.data)
+    bm.free()
+
+
+def _trim_edge(obj, keep=None):
+    """Remove the outermost ring of base faces, so the hairline cards (rooted on it) overhang the tinted
+    scalp instead of ending on a strip of solid base."""
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    kill = [f for f in bm.faces
+            if any(v.is_boundary and not (keep and keep(v.co)) for v in f.verts)]
+    bmesh.ops.delete(bm, geom=kill, context="FACES")
+    bm.to_mesh(obj.data)
+    bm.free()
+
+
 def make(res, body_obj, style_name):
     """Hair as an opaque base layer (the hair volume, darker) under layered strand cards.
 
@@ -405,8 +584,13 @@ def make(res, body_obj, style_name):
     cap, (yc, z_ref, z_top) = _cap(res, body_obj, style, "Hair")
     head_c = np.array([0.0, yc, (z_ref + z_top) / 2])
     hair_cards.orient_outward(cap, head_c)
-    extras, tie = _extras(style, cap, yc, z_ref, z_top)
-    hair_cards.set_flow(cap, _cap_flow(util.get_coords(cap), style, yc, z_ref, z_top, tie))
+    part = None
+    if style.get("part") is not None:
+        # a back-combed part only runs over the front; a hanging style's part runs back to the crown
+        part = (style["part"], yc + (0.02 if style.get("flow") == "back" else 0.05))
+        _cut_part(cap, *part)
+    extras, tie, line = _extras(style, cap, body_obj, yc, z_ref, z_top)
+    hair_cards.set_flow(cap, _cap_flow(util.get_coords(cap), style, yc, z_ref, z_top, tie, line))
     curtain = _curtain(res, body_obj, style, yc, z_ref, z_top)
     if curtain:
         hair_cards.orient_outward(curtain, head_c)
@@ -415,6 +599,9 @@ def make(res, body_obj, style_name):
         hair_cards.set_flow(curtain, np.tile([0.0, 0.0, -1.0], (len(curtain.data.vertices), 1)))
     # the hair tie joins the base after the cards are grown, so it never bends the combing directions
     ties = [o for o in extras if o.name.startswith("hair_tie")]
+    # braid strands get their own short cards (and never pull the scalp's combing towards them)
+    strands = [o for o in extras if o.name.startswith("hair_strand")]
+    ties += strands
     inner = None
     if curtain:
         # the face side of hanging hair needs strands too: a flipped copy just inside the curtain
@@ -446,6 +633,21 @@ def make(res, body_obj, style_name):
             bpy.ops.object.join()
     elif inner:
         bpy.data.objects.remove(inner, do_unlink=True)
+    if strands and style.get("cards", True):
+        sstyle = dict(style, card_len=style.get("braid_period", 0.05) * 0.7, card_width=0.008, card_lift=0.0008,
+                      card_density=4.0, card_jitter=0.04)
+        grown = [hair_cards.grow(o, sstyle, seed=10 + i, hairline=False) for i, o in enumerate(strands)]
+        grown = [g for g in grown if len(g.data.polygons)]
+        n_cards += sum(g["cards"] for g in grown)
+        if grown:
+            if cards is None:
+                cards, grown = grown[0], grown[1:]
+            if grown:
+                with bpy.context.temp_override(active_object=cards, selected_editable_objects=[cards] + grown,
+                                               object=cards):
+                    bpy.ops.object.join()
+    if cards:
+        _trim_edge(obj, keep=covered)
     # the base sits just under the card roots (and, at the tapered hairline, just under the skin)
     garments.offset_along_normals(obj, -0.0008)
     if ties:

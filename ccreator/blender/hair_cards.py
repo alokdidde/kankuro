@@ -11,7 +11,8 @@ import numpy as np
 from mathutils import Vector, kdtree
 from mathutils.bvhtree import BVHTree
 
-from . import body as bodymod, util
+from .. import morph, textures
+from . import util
 
 COLUMNS = 4  # strand variants side by side in the atlas (hairtex.COLUMNS)
 
@@ -254,43 +255,46 @@ def grow(guide, style, seed=1, hairline=True, skip_edge=None):
 
 # --- eyebrows -----------------------------------------------------------------------------------------
 
-def _eye_frame(res, side):
-    vs = bodymod.group_verts(f"helper-{side}-eye")
-    p = res.coords[vs]
-    return p.mean(0), np.ptp(p[:, 0]) / 2
-
-
 def brows(res, body_obj, thickness=1.0, arch=0.0, density=1.0, length=1.0, hairs_per_brow=260, seed=3):
-    """Eyebrow hairs on the current face. Same arc as the painted brow (textures._brow_mask):
-    inner hairs stand up, the body sweeps out towards the temple, lower and upper rows meet in the middle.
+    """Eyebrow hairs on the current face. Roots are placed in the brow band of the *neutral* base face
+    (textures.brow_arc, the same band the skin paint uses) and carried to the current face through the
+    triangle they hit, so hairs and paint coincide whatever the face morphs. Inner hairs stand up, the
+    body sweeps out towards the temple, lower and upper rows meet in the middle.
 
     thickness scales the band height, arch (-1 flat .. +1 high) lifts the outer-middle, density scales the
-    hair count, length (~0.7-1.2) is how far the tail reaches towards the temple."""
+    hair count, length (~0.5-1.4) is how far the tail reaches towards the temple."""
     rng = np.random.default_rng(seed)
     hairs_per_brow = int(hairs_per_brow * density * (0.6 + 0.4 * length))
     co = util.get_coords(body_obj)
     surf = _Surface(co, [list(p.vertices) for p in body_obj.data.polygons])
+    nco = morph.base()["coords"].astype(float)
+    tris = []
+    for f in morph.faces_of_group("body")[0]:
+        f = list(f)
+        tris += [(f[0], f[i], f[i + 1]) for i in range(1, len(f) - 1)]
+    tris = np.array(tris)
+    nbvh = BVHTree.FromPolygons([Vector(p) for p in nco], tris.tolist())
     out = ([], [], [], [])
     for side in ("l", "r"):
-        e, r = _eye_frame(res, side)
+        e, r = textures.eye_frame_base(side)
         sgn = 1.0 if side == "l" else -1.0  # +x towards the temple on the left
-        made = 0
-        while made < hairs_per_brow:
-            u = rng.uniform(-1.0, length)
+        made = tries = 0
+        while made < hairs_per_brow and tries < hairs_per_brow * 20:
+            tries += 1
+            u = rng.uniform(-0.92, length)
             if rng.random() > 1 - 0.55 * max(0.0, u / max(length, 0.1)) ** 1.5:  # the tail thins out
                 continue
-            if u < -0.7 and rng.random() < 0.45:  # and so does the inner end
+            if u < -0.65 and rng.random() < 0.5:  # and so does the inner end
                 continue
-            arc = e[2] + r * (1.45 + 0.35 * (1 - u ** 2)) - r * 0.25 * max(0.0, u)
-            arc += r * 0.3 * arch * max(0.0, 1 - (u - 0.3) ** 2 / 1.69)
-            thick = r * (0.29 - 0.15 * max(0.0, u)) * (1.15 if u < -0.6 else 1.0) * thickness
-            vn = float(np.clip(rng.normal(0, 0.55), -1.1, 1.1))  # -1 lower edge .. +1 upper edge
+            vn = float(np.clip(rng.normal(0, 0.5), -1.1, 1.1))  # -1 lower edge .. +1 upper edge
             x = e[0] + sgn * u * r * 2.1
-            z = arc + vn * thick
-            hit = surf.bvh.ray_cast(Vector((x, e[1] - 0.2, z)), Vector((0, 1, 0)), 0.4)
+            z = float(textures.brow_arc(u, e, r, arch)) + vn * float(textures.brow_thick(u, r, thickness))
+            hit = nbvh.ray_cast(Vector((x, e[1] - r * 20, z)), Vector((0, 1, 0)), r * 40)
             if hit[0] is None:
                 continue
-            root = np.array(hit[0])
+            a, b, c = nco[tris[hit[2]]]
+            bary = _barycentric(np.array(hit[0]), a, b, c)
+            root = bary @ res.coords[tris[hit[2]]]
             # angle from vertical towards the temple
             phi = np.interp(u, [-1, -0.6, -0.2, 0.3, 1.0], [12, 30, 62, 80, 98])
             if u > -0.5:
@@ -300,8 +304,8 @@ def brows(res, body_obj, thickness=1.0, arch=0.0, density=1.0, length=1.0, hairs
 
             def direction(p, n, want=want):
                 return _tangent(want, n)
-            length = rng.uniform(0.005, 0.008) * (0.75 if u < -0.6 else 1.0)
-            res_ = _walk(surf, root, length, length / 4, direction, lambda t: 0.00015 + 0.0006 * t)
+            hair_len = rng.uniform(0.005, 0.008) * (0.75 if u < -0.6 else 1.0)
+            res_ = _walk(surf, root, hair_len, hair_len / 4, direction, lambda t: 0.00015 + 0.0006 * t)
             if res_ is None:
                 continue
             pts, nrms = res_
@@ -311,6 +315,16 @@ def brows(res, body_obj, thickness=1.0, arch=0.0, density=1.0, length=1.0, hairs
     vg = obj.vertex_groups.new(name="head")
     vg.add(list(range(len(obj.data.vertices))), 1.0, "REPLACE")
     return obj
+
+
+def _barycentric(p, a, b, c):
+    v0, v1, v2 = b - a, c - a, p - a
+    d00, d01, d11 = v0 @ v0, v0 @ v1, v1 @ v1
+    d20, d21 = v2 @ v0, v2 @ v1
+    den = d00 * d11 - d01 * d01
+    v = (d11 * d20 - d01 * d21) / den
+    w = (d00 * d21 - d01 * d20) / den
+    return np.array([1 - v - w, v, w])
 
 
 def follow_shape_keys(obj, body_obj):

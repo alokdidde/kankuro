@@ -316,6 +316,12 @@ def layer_of(g):
     return g.get("layer", catalog.GARMENTS.get(g.get("type"), {}).get("layer", 1))
 
 
+def _brow_shape(skin):
+    """Brow band shape shared by the brow hairs and the shadow painted under them."""
+    return {"thickness": skin.get("brow_thickness") or 1.0, "arch": skin.get("brow_arch") or 0.0,
+            "length": skin.get("brow_length") or 1.0}
+
+
 def build_scene(spec, project, work_dir):
     """Build everything in the current Blender scene. Returns a Built."""
     b = Built()
@@ -344,28 +350,11 @@ def build_scene(spec, project, work_dir):
                                     materials.make("Tongue", color="#a8545a", roughness=0.45, subsurface=0.2))
             b.meshes.append(o)
 
-    # skin
-    skin = spec["skin"]
-    if skin.get("texture"):
-        img = os.path.join(project, skin["texture"])
-    else:
-        hs = spec.get("hair") or {}
-        scalp = hair.scalp_mask(res, hs["style"]) if hs.get("style") and not hs.get("source") else None
-        img = textures.skin_texture(skin["color"], os.path.join(work_dir, "skin.png"),
-                                    lips=skin.get("lips", True), brows=skin.get("brows", True),
-                                    brow_hex=skin.get("brow_color"), scalp=scalp,
-                                    scalp_hex=hs.get("color") or "#3b2a1e")
-    skin_n = textures.skin_detail(os.path.join(work_dir, "skin"))
-    body_obj.data.materials.append(materials.make("Skin", image_path=img, roughness=skin.get("roughness", 0.6),
-                                                  normal_path=skin_n, subsurface=0.3, specular=0.35))
-    eye_img = os.path.join(rig.DATA, "eyes", "brown_eye.png")
-    if spec["eyes"].get("iris_color"):
-        eye_img = materials.recolor_iris(eye_img, spec["eyes"]["iris_color"], os.path.join(work_dir, "eyes.png"))
-    eyes.data.materials.append(materials.make("Eyes", image_path=eye_img, roughness=0.15))
     t = _tick(b, "body_meshes", t)
 
     # hair
     h = spec.get("hair")
+    hobj = None
     if h:
         color = h.get("color") or "#3b2a1e"
         if h.get("source"):
@@ -400,10 +389,28 @@ def build_scene(spec, project, work_dir):
             hobj.data.materials[1] = materials.make_hair("Hair", cards_img)
         b.meshes.append(hobj)
         t = _tick(b, "hair", t)
+    # skin
+    skin = spec["skin"]
+    if skin.get("texture"):
+        img = os.path.join(project, skin["texture"])
+    else:
+        hs = spec.get("hair") or {}
+        # tint the scalp under procedural hair so it seems to grow out of the skin
+        scalp = hair.coverage_mask(res, hobj) if hs.get("style") and not hs.get("source") else None
+        img = textures.skin_texture(skin["color"], os.path.join(work_dir, "skin.png"),
+                                    lips=skin.get("lips", True), brows=skin.get("brows", True),
+                                    brow_hex=skin.get("brow_color") or hs.get("color"), scalp=scalp,
+                                    scalp_hex=hs.get("color") or "#3b2a1e", brow_shape=_brow_shape(skin))
+    skin_n = textures.skin_detail(os.path.join(work_dir, "skin"))
+    body_obj.data.materials.append(materials.make("Skin", image_path=img, roughness=skin.get("roughness", 0.6),
+                                                  normal_path=skin_n, subsurface=0.3, specular=0.35))
+    eye_img = os.path.join(rig.DATA, "eyes", "brown_eye.png")
+    if spec["eyes"].get("iris_color"):
+        eye_img = materials.recolor_iris(eye_img, spec["eyes"]["iris_color"], os.path.join(work_dir, "eyes.png"))
+    eyes.data.materials.append(materials.make("Eyes", image_path=eye_img, roughness=0.15))
+
     if skin.get("brows", True):
-        bobj = hair_cards.brows(res, body_obj, thickness=skin.get("brow_thickness") or 1.0,
-                                arch=skin.get("brow_arch") or 0.0, density=skin.get("brow_density") or 1.0,
-                                length=skin.get("brow_length") or 1.0)
+        bobj = hair_cards.brows(res, body_obj, density=skin.get("brow_density") or 1.0, **_brow_shape(skin))
         hair_cards.follow_shape_keys(bobj, body_obj)
         brow_hex = skin.get("brow_color") or (h or {}).get("color") or "#2a1d14"
         bimg = hairtex.brow_atlas(brow_hex, os.path.join(work_dir, "brows.png"))
