@@ -101,6 +101,11 @@ def skin_texture(skin_hex, out, size=1024, lips=True, brows=True, brow_hex=None)
     from .blender_free import hex_rgb
     tone = np.array(hex_rgb(skin_hex))
     img = np.ones((size, size, 3), dtype=np.float32) * tone
+    # subtle blotchy variation (slightly redder/darker patches) so the tone isn't a flat paint
+    from .fabric import _noise
+    rng = np.random.default_rng(3)
+    blot = _noise((size, size), size / 40, rng) * 0.5 + _noise((size, size), size / 140, rng) * 0.5
+    img = img * (1 + 0.035 * blot[..., None] * np.array([0.6, 1.0, 1.1]))
     tv, tuv = _body_uv_tris()
     if lips:
         m = _target_mask(["mouth/mouth-upperlip-volume-incr", "mouth/mouth-lowerlip-volume-incr"])
@@ -117,6 +122,20 @@ def skin_texture(skin_hex, out, size=1024, lips=True, brows=True, brow_hex=None)
         img = img * (1 - 0.85 * br) + bc * 0.85 * br
     Image.fromarray((np.clip(img, 0, 1) * 255).astype(np.uint8)).save(out)
     return out
+
+
+def skin_detail(out_prefix, size=2048, seed=5):
+    """Pore/micro-wrinkle normal map for the body UV layout. Fine surface detail breaks up specular
+    highlights, which is most of what makes bare skin look like plastic."""
+    from .fabric import _noise, normal_from_height
+    rng = np.random.default_rng(seed)
+    pores = -np.clip(_noise((size, size), 1.2, rng), 0.6, None)  # small pits
+    micro = _noise((size, size), 3.0, rng, aniso=(0.4, 1.6)) * 0.35
+    h = pores + micro
+    n = normal_from_height(h.astype(np.float32), 0.06)
+    n_path = out_prefix + "_normal.jpg"
+    Image.fromarray(((n * 0.5 + 0.5) * 255).clip(0, 255).astype(np.uint8)).save(n_path, quality=94)
+    return n_path
 
 
 def uv_template(polys_uv, out, title, size=2048, labels=(("FRONT", 0.25), ("BACK", 0.75)), mask_out=None):

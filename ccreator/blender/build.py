@@ -234,7 +234,9 @@ def build_scene(spec, project, work_dir):
         img = textures.skin_texture(skin["color"], os.path.join(work_dir, "skin.png"),
                                     lips=skin.get("lips", True), brows=skin.get("brows", True),
                                     brow_hex=skin.get("brow_color"))
-    body_obj.data.materials.append(materials.make("Skin", image_path=img, roughness=skin.get("roughness", 0.55)))
+    skin_n = textures.skin_detail(os.path.join(work_dir, "skin"))
+    body_obj.data.materials.append(materials.make("Skin", image_path=img, roughness=skin.get("roughness", 0.6),
+                                                  normal_path=skin_n, subsurface=0.3, specular=0.35))
     eye_img = os.path.join(rig.DATA, "eyes", "brown_eye.png")
     if spec["eyes"].get("iris_color"):
         eye_img = materials.recolor_iris(eye_img, spec["eyes"]["iris_color"], os.path.join(work_dir, "eyes.png"))
@@ -266,7 +268,7 @@ def build_scene(spec, project, work_dir):
         t = _tick(b, "hair", t)
 
     # garments, inner layers first
-    covers = []
+    covers, covers_all = [], []
     order = sorted(spec["garments"], key=lambda g: (g.get("layer", catalog.GARMENTS.get(g.get("type"), {}).get("layer", 1))))
     for rank, g in enumerate(order):
         if g.get("source"):
@@ -277,7 +279,12 @@ def build_scene(spec, project, work_dir):
             util.add_armature_modifier(gobj, res.arm)
             keep_mats = not g.get("texture") and not g.get("color") and len(gobj.data.materials) > 0
         else:
-            gobj, info = garments.make(res, reference_body(), body_obj, g["id"], g["type"], layer_of(g))
+            # stack over lower layers only; footwear always sits under hems rather than over them
+            under = [o for o, l in covers_all if l < layer_of(g)]
+            if catalog.GARMENTS[g["type"]].get("slot") == "feet":
+                under = []
+            worn = garments.mesh_bvh(under) if under else None
+            gobj, info = garments.make(res, reference_body(), body_obj, g["id"], g["type"], layer_of(g), worn)
             b.uv_info[g["id"]] = info
             keep_mats = False
         if not keep_mats:
@@ -286,6 +293,7 @@ def build_scene(spec, project, work_dir):
         gobj["garment_id"] = g["id"]
         if g.get("hide_body", True):
             covers.append(gobj)
+        covers_all.append((gobj, layer_of(g)))
         b.meshes.append(gobj)
     if spec["garments"]:
         t = _tick(b, "garments", t)

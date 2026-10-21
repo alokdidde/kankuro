@@ -33,7 +33,7 @@ def default_spec(name="character", preset="neutral"):
         "version": VERSION,
         "name": name,
         "body": {"preset": preset, "macros": dict(PRESETS[preset]), "morphs": {}, "height_cm": None},
-        "skin": {"color": "#d8a383", "texture": None, "roughness": 0.55,
+        "skin": {"color": "#d8a383", "texture": None, "roughness": 0.6,
                  "lips": True, "brows": True, "brow_color": None},
         "eyes": {"iris_color": None},
         "hair": None,

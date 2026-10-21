@@ -19,15 +19,18 @@ HAIR_STYLES = {
 
 # Garments: cut from MakeHuman's "tights" helper (or skirt helper) and conformed to the body.
 #   regions: bone -> [t_min, t_max] along the bone (0 = head, 1 = tail); "*" means both sides (_l/_r)
+#   neckline: round opening around the neck base (radius, drop below it at front/back), in metres
 #   offset: distance from the skin; layer: stacking order (higher sits outside lower layers)
 GARMENTS = {
     "tshirt": {
         "fabric": "cotton", "desc": "Short-sleeve crew-neck T-shirt", "slot": "top", "layer": 1, "offset": 0.006,
         "regions": {"torso": [0.1, 1], "clavicle_*": [0, 1], "upperarm_*": [0, 0.45]},
+        "neckline": {"radius": 0.07, "front": 0.085, "back": 0.04},
     },
     "longsleeve": {
         "fabric": "cotton", "desc": "Long-sleeve crew-neck top", "slot": "top", "layer": 1, "offset": 0.006,
         "regions": {"torso": [0.1, 1], "clavicle_*": [0, 1], "upperarm_*": [0, 1], "lowerarm_*": [0, 0.92]},
+        "neckline": {"radius": 0.07, "front": 0.085, "back": 0.04},
     },
     "tanktop": {
         "fabric": "cotton", "desc": "Sleeveless tank top", "slot": "top", "layer": 1, "offset": 0.005,

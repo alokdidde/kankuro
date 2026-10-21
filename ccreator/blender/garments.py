@@ -56,12 +56,28 @@ def select_faces(res, gdef, verts, faces_local):
         # A range starting at exactly 0 or ending at exactly 1 is open-ended: projections overshoot slightly near joints
         lim = {n: (-np.inf if a == 0 else a, np.inf if b == 1 else b) for n, (a, b) in regions.items()}
         inc = np.array([n in lim and lim[n][0] <= ti <= lim[n][1] for n, ti in zip(names, t)])
+        if "neckline" in gdef:
+            inc &= ~_neck_hole(co, heads["neck_01"], **gdef["neckline"])
     else:
         z = co[:, 2]
         top, bot = z.max(), z.min()
         inc = z >= top - gdef.get("length", 1.0) * (top - bot)
     keep = [i for i, f in enumerate(faces_local) if inc[f].mean() >= 0.5]
     return keep
+
+
+def _neck_hole(co, neck, radius, front, back):
+    """Vertices inside a crew/scoop neck opening: a disc of `radius` around the neck base, cut from
+    `back` metres below the neck base at the back down to `front` metres below it at the front."""
+    d = co[:, :2] - np.array([neck.x, neck.y])
+    r = np.linalg.norm(d, axis=1)
+    fwd = np.clip(-d[:, 1] / np.maximum(r, 1e-6), -1, 1)  # +1 straight ahead (characters face -Y)
+    w = (0.5 + 0.5 * fwd) ** 2
+    drop = back + (front - back) * w
+    # the neck is set back on the shoulders: widen the opening behind and beside it so the back
+    # doesn't ride up the neck in flaps
+    rad = radius * (1 + 0.25 * (1 - w))
+    return (r < rad) & (co[:, 2] > neck.z - drop)
 
 
 def _largest_components(bm, min_frac=0.03):
@@ -100,16 +116,83 @@ def _smooth_boundary(bm, iterations=4):
             v.co = c
 
 
+def _boundary_loops(bm):
+    """Boundary edge loops, each as an ordered list of verts."""
+    seen, loops = set(), []
+    for v in bm.verts:
+        if v in seen or not v.is_boundary:
+            continue
+        loop, prev, cur = [], None, v
+        while cur is not None and cur not in seen:
+            seen.add(cur)
+            loop.append(cur)
+            nb = [e.other_vert(cur) for e in cur.link_edges if e.is_boundary]
+            nxt = [y for y in nb if y is not prev and y not in seen]
+            prev, cur = cur, (nxt[0] if nxt else None)
+        loops.append(loop)
+    return loops
+
+
+def _fade_into(delta, loop, rings):
+    """Spread per-vertex offsets on a hem loop over the next `rings` rings of vertices, fading out."""
+    front, done = list(loop), set(loop)
+    for r in range(1, rings + 1):
+        nxt = []
+        for v in front:
+            for e in v.link_edges:
+                y = e.other_vert(v)
+                if y not in done:
+                    done.add(y)
+                    delta[y] = delta[v] * (1 - r / (rings + 1))
+                    nxt.append(y)
+        front = nxt
+    for v, d in delta.items():
+        v.co += d
+
+
+def _smooth_loops(bm, harmonics=5, rings=3):
+    """Low-pass every hem/neck/cuff loop (keep the first Fourier harmonics). Region cuts follow the
+    mesh's diagonal edges, so openings come out jagged; this makes them clean, round curves."""
+    for loop in _boundary_loops(bm):
+        n = len(loop)
+        if n < 4 * harmonics:
+            continue
+        co = np.array([v.co for v in loop])
+        f = np.fft.rfft(co, axis=0)
+        f[harmonics + 1:] = 0
+        sm = np.fft.irfft(f, n=n, axis=0)
+        _fade_into({v: Vector(sm[i] - co[i]) for i, v in enumerate(loop)}, loop, rings)
+
+
+def _level_hems(bm, z0, z1, rings=3):
+    """Make waist-height hems and waistbands level: flatten each roughly horizontal loop around the
+    torso to its mean height and fade the correction over the next few rings of vertices."""
+    for loop in _boundary_loops(bm):
+        co = np.array([v.co for v in loop])
+        zm = co[:, 2].mean()
+        extent = max(np.ptp(co[:, 0]), np.ptp(co[:, 1]))
+        if not (z0 - 0.08 < zm < z0 + 0.6 * (z1 - z0)) or np.ptp(co[:, 2]) > 0.35 * extent:
+            continue
+        _fade_into({v: Vector((0, 0, zm - v.co.z)) for v in loop}, loop, rings)
+
+
 def apply_modifier(obj, mod):
     with bpy.context.temp_override(object=obj, active_object=obj, selected_objects=[obj]):
         bpy.ops.object.modifier_apply(modifier=mod.name)
 
 
-def body_bvh(body_obj):
-    me = body_obj.data
-    co = [v.co.copy() for v in me.vertices]
-    polys = [list(p.vertices) for p in me.polygons]
+def mesh_bvh(objs):
+    """BVH over the rest-pose surfaces of one or more mesh objects."""
+    co, polys = [], []
+    for o in objs:
+        off = len(co)
+        co += [v.co.copy() for v in o.data.vertices]
+        polys += [[off + i for i in p.vertices] for p in o.data.polygons]
     return BVHTree.FromPolygons(co, polys)
+
+
+def body_bvh(body_obj):
+    return mesh_bvh([body_obj])
 
 
 def conform(obj, bvh, gap):
@@ -127,6 +210,24 @@ def conform(obj, bvh, gap):
             moved += 1
     util.set_coords(obj, co)
     return moved
+
+
+def conform_over(obj, body_bvh_, worn_bvh, gap):
+    """Keep an outer garment outside garments already worn: measure each vertex's height above the
+    skin, ray-cast the worn layers along the same skin normal, and lift the vertex just past them."""
+    co = util.get_coords(obj)
+    lift = np.zeros(len(co))
+    for i, p in enumerate(co):
+        loc, nrm, _, _ = body_bvh_.find_nearest(Vector(p))
+        if loc is None:
+            continue
+        h = (Vector(p) - loc).dot(nrm)
+        hit, _, _, dist = worn_bvh.ray_cast(loc + nrm * 0.0005, nrm, 0.15)
+        if hit is not None and h < dist + gap:
+            lift[i] = dist + gap - h
+            co[i] = np.array(Vector(p) + nrm * lift[i])
+    util.set_coords(obj, co)
+    return int((lift > 0).sum())
 
 
 def offset_along_normals(obj, dist):
@@ -148,8 +249,26 @@ def flat_sketch_uv(obj, margin=0.03):
     uv = me.uv_layers.get("UVMap") or me.uv_layers.new(name="UVMap")
     me.uv_layers.active = uv
     data = np.zeros((len(me.loops), 2))
+    cen = np.array([p.center for p in me.polygons])
+    nrm_y = np.array([p.normal.y for p in me.polygons])
+    # Front/back split like a sewn pattern: side seams at mid-depth of the torso (straight down from
+    # under the armpit) and sleeve seams along the middle of the arm, rather than wherever the
+    # surface turns sideways (which drifts forward over the chest).
+    # (UVs are laid out on the neutral reference body, whose arms start ~0.15 m from the centre line)
+    arm = np.abs(cen[:, 0]) > 0.15
+    key = np.where(arm, np.abs(cen[:, 0]), cen[:, 2])
+    mid = np.zeros(len(cen))
+    for part in (arm, ~arm):
+        if not part.any():
+            continue
+        edges = np.linspace(key[part].min(), key[part].max() + 1e-6, 25)
+        idx = np.digitize(key[part], edges)
+        ys = cen[part, 1]
+        means = {i: (ys[idx == i].min() + ys[idx == i].max()) / 2 for i in np.unique(idx)}
+        mid[part] = [means[i] for i in idx]
+    is_front = np.where(np.abs(cen[:, 1] - mid) > 1e-4, cen[:, 1] < mid, nrm_y <= 0)
     for p in me.polygons:
-        front = p.normal.y <= 0  # characters face -Y
+        front = bool(is_front[p.index])  # characters face -Y
         cx = 0.25 if front else 0.75
         sgn = 1 if front else -1
         for li in p.loop_indices:
@@ -175,6 +294,10 @@ def _shape(res, gdef, gid, verts, faces_local, keep):
     bm = bmesh.new()
     bm.from_mesh(obj.data)
     _smooth_boundary(bm)
+    if "regions" in gdef:
+        _smooth_loops(bm)
+        heads = {b.name: b.head_local for b in res.arm.data.bones}
+        _level_hems(bm, heads["pelvis"].z, heads["neck_01"].z)
     bm.to_mesh(obj.data)
     bm.free()
     if gdef.get("sole"):
@@ -224,7 +347,7 @@ def skin_from_body(obj, body_obj, bones, smooth_iters=10, smooth_factor=0.5):
     util.set_weight_matrix(obj, W, bones)
 
 
-def make(res, ref_res, body_obj, gid, gtype, layer_rank=0):
+def make(res, ref_res, body_obj, gid, gtype, layer_rank=0, worn=None):
     """Build a standard garment on `res`'s body. The face cut and the UV layout come from the neutral
     reference body (`ref_res`), so one texture fits the garment on every body shape."""
     gdef = catalog.GARMENTS[gtype]
@@ -244,10 +367,14 @@ def make(res, ref_res, body_obj, gid, gtype, layer_rank=0):
         bpy.data.objects.remove(ref, do_unlink=True)
     keep, uv, uvinfo = _UV_CACHE[gtype]
     obj = _shape(res, gdef, gid, verts, faces_local, keep)
-    gap = gdef["offset"] + 0.003 * layer_rank
+    # Stacking on garments already worn is handled by conform_over; the layer only nudges the gap
+    gap = gdef["offset"] + 0.001 * layer_rank
     skin_from_body(obj, body_obj, res.bones, smooth_iters=gdef.get("weight_smooth", 10))
     offset_along_normals(obj, gap)
-    conform(obj, body_bvh(body_obj), gap * 0.8)
+    bvh = body_bvh(body_obj)
+    conform(obj, bvh, gap * 0.8)
+    if worn is not None:
+        conform_over(obj, bvh, worn, 0.006)
     if gdef.get("sole"):
         co = util.get_coords(obj)
         co[:, 2] = np.maximum(co[:, 2], 0.0)
@@ -255,7 +382,7 @@ def make(res, ref_res, body_obj, gid, gtype, layer_rank=0):
     layer = obj.data.uv_layers.get("UVMap") or obj.data.uv_layers.new(name="UVMap")
     layer.data.foreach_set("uv", uv)
     sol = obj.modifiers.new("thickness", "SOLIDIFY")
-    sol.thickness = 0.003
+    sol.thickness = 0.0015
     sol.offset = 1.0
     sol.use_rim = True
     sol.use_quality_normals = True

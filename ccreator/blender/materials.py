@@ -17,7 +17,7 @@ def srgb_to_linear(c):
 
 
 def make(name, color=None, image_path=None, roughness=0.6, metallic=0.0, double_sided=False,
-         normal_path=None, normal_strength=1.0):
+         normal_path=None, normal_strength=1.0, subsurface=0.0, specular=None):
     mat = bpy.data.materials.new(name)
     nt = mat.node_tree
     bsdf = nt.nodes.get("Principled BSDF")
@@ -31,6 +31,14 @@ def make(name, color=None, image_path=None, roughness=0.6, metallic=0.0, double_
         nt.links.new(nmap.outputs["Normal"], bsdf.inputs["Normal"])
     bsdf.inputs["Roughness"].default_value = roughness
     bsdf.inputs["Metallic"].default_value = metallic
+    if subsurface:
+        # skin: light scatters further in red, which softens shading and kills the plastic look
+        bsdf.subsurface_method = "RANDOM_WALK_SKIN"
+        bsdf.inputs["Subsurface Weight"].default_value = subsurface
+        bsdf.inputs["Subsurface Radius"].default_value = (1.0, 0.35, 0.2)
+        bsdf.inputs["Subsurface Scale"].default_value = 0.006
+    if specular is not None:
+        bsdf.inputs["Specular IOR Level"].default_value = specular
     if image_path:
         img = bpy.data.images.load(os.path.abspath(image_path))
         tex = nt.nodes.new("ShaderNodeTexImage")

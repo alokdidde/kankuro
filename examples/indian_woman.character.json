@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "name": "priya",
+  "body": {
+    "preset": "female",
+    "macros": {
+      "gender": 0.0,
+      "breast_size": 0.5,
+      "age": 0.45,
+      "weight": 0.5,
+      "muscle": 0.45,
+      "caucasian": 0.55,
+      "asian": 0.25,
+      "african": 0.2
+    },
+    "morphs": {},
+    "height_cm": 160
+  },
+  "skin": {
+    "color": "#a86f4c",
+    "texture": null,
+    "roughness": 0.6,
+    "lips": true,
+    "brows": true,
+    "brow_color": "#1a110c"
+  },
+  "eyes": {
+    "iris_color": "#3b2414"
+  },
+  "hair": {
+    "style": "ponytail",
+    "color": "#120c09"
+  },
+  "garments": [
+    {
+      "id": "long_skirt",
+      "type": "long_skirt",
+      "color": "#7a1424",
+      "fabric": "silk"
+    },
+    {
+      "id": "tshirt",
+      "type": "tshirt",
+      "color": "#c9902a",
+      "fabric": "cotton",
+      "layer": 3
+    },
+    {
+      "id": "shoes",
+      "type": "shoes",
+      "color": "#6b3a1e"
+    }
+  ],
+  "export": {
+    "animations": [],
+    "hide_body_under_clothes": true,
+    "texture_size": 2048
+  }
+}
