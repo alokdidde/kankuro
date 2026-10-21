@@ -290,7 +290,7 @@ def creases(chain_s, weight, size, px_per_mm, rng, amount):
 
 def bake(out_prefix, size, uv_per_m, mask=None, color="#8a8f99", albedo_path=None, fabric="cotton",
          height_path=None, normal_path=None, strength=1.0, seed=1, ao=None, chain_s=None, crease_w=None, detail=None,
-         seams=None, placket_spec=None):
+         seams=None, placket_spec=None, finish=None, roughness=None, regions=()):
     """Write <prefix>_albedo.jpg and <prefix>_normal.jpg (JPEG keeps the GLB small).
 
     ao: (size, size) ambient occlusion baked from the dressed character (1 = open), multiplied into the
@@ -299,6 +299,11 @@ def bake(out_prefix, size, uv_per_m, mask=None, color="#8a8f99", albedo_path=Non
     detail: 0..1 map fading procedural detail where the UVs are squeezed (it would smear into streaks).
     seams: UV segments where panels are sewn together (no hem stitching drawn along them).
     placket_spec: {u, v, length, width, buttons} for a buttoned front placket (kurta).
+    finish: a resolved matlib preset for the whole garment (metal armour, lacquered leather): its
+    metallic/roughness replace the fabric's, and its colour is the base colour unless a texture is given.
+    regions: [(mask, preset)] areas of the template (0..1 float masks) in another material, e.g. a gold
+    zari border: tinted with the preset's colour, keeping the cloth's weave relief, folds and occlusion,
+    and written into a metallic-roughness map (<prefix>_mr.png: G = roughness, B = metallic).
     Returns (albedo, normal, material) where material holds roughness/sheen/specular for the shader."""
     rng = np.random.default_rng(seed)
     px_per_mm = size * uv_per_m / 1000.0
@@ -328,7 +333,9 @@ def bake(out_prefix, size, uv_per_m, mask=None, color="#8a8f99", albedo_path=Non
     if albedo_path:
         alb = _load(albedo_path, size, "RGB")
     else:
-        alb = np.ones((size, size, 3), np.float32) * np.array(hex_rgb(color), np.float32)
+        alb = np.ones((size, size, 3), np.float32) * np.array(hex_rgb(finish["color"] if finish else color),
+                                                             np.float32)
+    alb0 = alb.copy()
     if f:
         # real cloth is never one flat colour: dye mottling, fibre heathering and (denim) white weft
         alb = alb * (1 + 0.03 * (_noise((size, size), 45 * px_per_mm, rng) * keep)[..., None])
@@ -349,11 +356,30 @@ def bake(out_prefix, size, uv_per_m, mask=None, color="#8a8f99", albedo_path=Non
         # squeezed UV strips can't hold occlusion detail either (it shows as blocks): fade it there too
         ao = 1 - (1 - np.clip(ao, 0, 1)) * keep
         alb = alb * (0.5 + 0.5 * ao)[..., None]
+    rough0 = finish["roughness"] if finish else (roughness if roughness is not None else (f["rough"] if f else 0.8))
+    metal0 = finish["metallic"] if finish else 0.0
+    mr_path = None
+    if regions:
+        # the shading baked into the albedo (AO, cavities, heathering) as a factor of the plain colour,
+        # carried over onto the region's colour
+        shade = (alb / np.maximum(alb0, 0.02)).mean(-1, keepdims=True)
+        R = np.full((size, size), rough0, np.float32)
+        M = np.full((size, size), metal0, np.float32)
+        for rmask, rp in regions:
+            w = rmask.astype(np.float32)[..., None]
+            alb = alb * (1 - w) + np.array(hex_rgb(rp["color"]), np.float32) * shade * w
+            R = R * (1 - w[..., 0]) + rp["roughness"] * w[..., 0]
+            M = M * (1 - w[..., 0]) + rp["metallic"] * w[..., 0]
+        mr = np.zeros((size, size, 3), np.float32)
+        mr[..., 1], mr[..., 2] = R, M
+        mr_path = out_prefix + "_mr.png"
+        Image.fromarray((np.clip(mr, 0, 1) * 255).astype(np.uint8)).save(mr_path)
     a_path = out_prefix + "_albedo.jpg"
     n_path = out_prefix + "_normal.jpg"
     Image.fromarray((np.clip(alb, 0, 1) * 255).astype(np.uint8)).save(a_path, quality=92)
     Image.fromarray(((n * 0.5 + 0.5) * 255).clip(0, 255).astype(np.uint8)).save(n_path, quality=94)
-    mat = {"roughness": f["rough"] if f else 0.8, "sheen": f["sheen"] if f else 0.3,
+    mat = {"roughness": rough0, "metallic": metal0, "mr": mr_path,
+           "sheen": 0.0 if finish and finish["metallic"] > 0.5 else (f["sheen"] if f else 0.3),
            "sheen_roughness": f["sheen_rough"] if f else 0.5, "specular": f["spec"] if f else 0.3}
     m = mask if mask is not None else np.ones((size, size), bool)
     mean = alb[m].mean(0) if m.any() else np.full(3, 0.5)

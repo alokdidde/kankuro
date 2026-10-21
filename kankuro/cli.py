@@ -80,6 +80,13 @@ def cmd_catalog(a):
         "garments": {k: {"desc": v["desc"], "slot": v["slot"], "layer": v["layer"], "fabric": v.get("fabric")}
                      for k, v in catalog.GARMENTS.items()},
         "fabrics": {k: v["desc"] for k, v in __import__("kankuro.fabric", fromlist=["FABRICS"]).FABRICS.items()},
+        "materials": {"presets": __import__("kankuro.matlib", fromlist=["summary"]).summary(),
+                      "regions": {"border": "band along every open edge (hems, neckline, cuffs, a saree's long "
+                                            "edges), not the sewn seams",
+                                  "hem": "band along the lowest open edges only",
+                                  "<name> --mask PNG": "your own mask on the garment's UV template (white = in)"},
+                      "usage": "kankuro garment set saree --material-region border=gold_zari  |  "
+                               "kankuro garment import --file armour.glb --id kavach --material bronze"},
         "face_sliders": {k: {"range": r, "desc": d} for k, (d, _, r) in appearance.FACE_SLIDERS.items()},
         "face_presets": {k: v["desc"] for k, v in appearance.FACE_PRESETS.items()},
         "colors": {"skin": appearance.SKIN_TONES, "hair": appearance.HAIR_COLORS, "eyes": appearance.EYE_COLORS,
@@ -207,11 +214,51 @@ def cmd_garment(a):
             g[key] = specmod.import_file(p, val, kind) if val else None
     if a.normal_strength is not None:
         g["normal_strength"] = a.normal_strength
+    _garment_material(p, g, a)
     specmod.save(p, s)
     out = {"garment": g, "garments": s["garments"]}
     if replaced:
         out["replaced"] = replaced
     return out
+
+
+def _garment_material(p, g, a):
+    """--material, --material-region NAME=PRESET[:#RRGGBB] and --mask PNG."""
+    from . import matlib
+    if a.material is not None:
+        if a.material == "none":
+            g.pop("material", None)
+        else:
+            matlib.check(a.material)
+            g["material"] = a.material
+            if a.color is None:
+                g.pop("color", None)  # show the preset's own colour (gold, silver...) unless one is given
+    regions = g.get("material_regions") or {}
+    for item in a.material_region or []:
+        name, sep, val = item.partition("=")
+        if not sep or not name:
+            raise CliError("bad_value", f"--material-region '{item}': expected NAME=PRESET",
+                           hint="e.g. --material-region border=gold_zari (regions: border, hem, or any name with --mask)")
+        if val == "none":
+            regions.pop(name, None)
+            continue
+        preset, _, col = val.partition(":")
+        matlib.check(preset, f"material_regions.{name}")
+        ref = {"preset": preset}
+        if col:
+            ref["color"] = specmod.color(col, f"material_regions.{name}.color")
+        if a.mask:
+            ref["mask"] = specmod.import_file(p, a.mask, "textures")
+        elif name not in matlib.REGIONS:
+            raise CliError("missing_arg", f"Region '{name}' is not built in; pass --mask <png>",
+                           hint="Built-in regions: " + ", ".join(matlib.REGIONS))
+        regions[name] = ref["preset"] if len(ref) == 1 else ref
+    if a.mask and not a.material_region:
+        raise CliError("missing_arg", "--mask needs --material-region NAME=PRESET")
+    if regions:
+        g["material_regions"] = regions
+    else:
+        g.pop("material_regions", None)
 
 
 # ---------------------------------------------------------------- Blender-backed commands
@@ -371,6 +418,14 @@ def cmd_template(a):
                                      size=a.size, mask_out=mask)
             results[gid] = {"template": path, "mask": mask, "layout": info.get("layout", "front_back_flat_sketch"),
                             "size": a.size}
+            if info.get("scale_px_per_m"):  # the built-in material regions (for --material-region)
+                from PIL import Image
+                width = catalog.GARMENTS.get(gid, {}).get("border", 0.025)
+                for rname in ("border", "hem"):
+                    rm = build.region_mask(m, rname, a.size, info["scale_px_per_m"], width)
+                    rp = os.path.join(out_dir, f"{gid}_{rname}_mask.png")
+                    Image.fromarray((rm * 255).astype("uint8")).save(rp)
+                    results[gid][f"{rname}_mask"] = rp
     if "body" in want_types:
         from . import morph as mm
         import numpy as np
@@ -657,6 +712,7 @@ SCHEMA = {
     "garment add <type> [--id ID] [--color HEX] [--texture PNG] [--layer N] [--keep-slot]": "add a standard garment (replaces others in its slot unless --keep-slot)",
     "garment import --file MESH --id ID [--texture PNG] [--color HEX]": "custom garment authored on the reference body",
     "garment set <id> [--color HEX] [--texture PNG|''] [--fabric NAME|none] [--normal PNG] [--height PNG] [--normal-strength F] [--layer N] [--hide-body true|false]": "change a garment; texture = albedo, height/normal add 3D relief on the same UV template",
+    "garment set <id> [--material PRESET|none] [--material-region NAME=PRESET[:#HEX]] [--mask PNG]": "metal/gem/zari materials for the whole garment or a region of its UV template (`catalog materials`)",
     "garment remove <id>": "remove a garment",
     "template [targets...] [--out DIR] [--size PX]": "write UV template + mask PNGs (garment ids/types, 'body', or 'all')",
     "build [--out GLB] [--animations A,B|all] [--render]": "build and export the rigged GLB",
@@ -746,6 +802,10 @@ def parser():
     x.add_argument("--normal", help="tangent-space normal map PNG (OpenGL/+Y) on the garment UV template")
     x.add_argument("--height", help="greyscale height/bump PNG on the template (white = raised); turned into normals")
     x.add_argument("--normal-strength", type=float)
+    x.add_argument("--material", help="material preset for the whole garment (see `catalog materials`) or 'none'")
+    x.add_argument("--material-region", action="append", metavar="NAME=PRESET[:#RRGGBB]",
+                   help="a region of the UV template in another material, e.g. border=gold_zari; PRESET none removes it")
+    x.add_argument("--mask", help="greyscale PNG on the garment UV template (white = in the region) for --material-region")
     x.add_argument("--keep-slot", action="store_true")
 
     x = _sub("template")

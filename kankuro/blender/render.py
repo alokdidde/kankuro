@@ -45,9 +45,7 @@ def _setup(size, samples):
     if not sc.world:
         sc.world = bpy.data.worlds.new("World")
     sc.world.use_nodes = True
-    bg = sc.world.node_tree.nodes["Background"]
-    bg.inputs[0].default_value = (0.82, 0.84, 0.88, 1)
-    bg.inputs[1].default_value = 0.8
+    _studio_world(sc.world)
     if "_key" not in bpy.data.objects:
         # soft, broad suns (studio-like): hard pin-point light makes cloth read as plastic
         for name, rot, energy, ang in (("_key", (50, 0, -35), 3.0, 14), ("_fill", (60, 0, 140), 1.0, 30),
@@ -58,6 +56,70 @@ def _setup(size, samples):
             lo = bpy.data.objects.new(name, ld)
             lo.rotation_euler = [math.radians(a) for a in rot]
             sc.collection.objects.link(lo)
+
+
+def _studio_world(world):
+    """The backdrop stays a flat light grey, but what reflections see is a studio: a bright ceiling, a
+    darker floor and two softbox strips. Metal and gems have no colour of their own to show without
+    something to reflect (in a uniform grey world gold reads as flat yellow paint). It averages out to the
+    same light as the flat grey, so cloth and skin are lit as before."""
+    nt = world.node_tree
+    if "_studio" in nt.nodes:
+        return
+    bg = nt.nodes["Background"]
+    bg.inputs[0].default_value = (0.82, 0.84, 0.88, 1)
+    bg.inputs[1].default_value = 0.8
+    N = nt.nodes.new
+    tc = N("ShaderNodeTexCoord")
+    sep = N("ShaderNodeSeparateXYZ")
+    nt.links.new(tc.outputs["Generated"], sep.inputs[0])  # world "Generated" = view direction
+    ramp = N("ShaderNodeValToRGB")
+    ramp.name = "_studio"
+    els = ramp.color_ramp.elements
+    els[0].position, els[0].color = 0.0, (0.3, 0.3, 0.31, 1)  # floor (direction z <= 0)
+    els[1].position, els[1].color = 0.6, (1.25, 1.27, 1.32, 1)  # ceiling
+    mid = els.new(0.12)
+    mid.color = (0.55, 0.56, 0.6, 1)  # horizon
+    nt.links.new(sep.outputs["Z"], ramp.inputs["Fac"])
+    # two vertical softboxes, front-left and back-right (bright stripes along a ring's edge)
+    grad = N("ShaderNodeTexGradient")
+    grad.gradient_type = "RADIAL"
+    nt.links.new(tc.outputs["Generated"], grad.inputs["Vector"])
+    strips = N("ShaderNodeMath")
+    strips.operation = "SINE"
+    mul = N("ShaderNodeMath")
+    mul.operation = "MULTIPLY"
+    mul.inputs[1].default_value = 2 * math.pi * 2
+    nt.links.new(grad.outputs["Fac"], mul.inputs[0])
+    nt.links.new(mul.outputs[0], strips.inputs[0])
+    pw = N("ShaderNodeMath")
+    pw.operation = "POWER"
+    pw.inputs[1].default_value = 24.0
+    clampz = N("ShaderNodeMath")
+    clampz.operation = "MAXIMUM"
+    clampz.inputs[1].default_value = 0.0
+    nt.links.new(strips.outputs[0], clampz.inputs[0])
+    nt.links.new(clampz.outputs[0], pw.inputs[0])
+    box = N("ShaderNodeMath")
+    box.operation = "MULTIPLY"
+    box.inputs[1].default_value = 3.0
+    nt.links.new(pw.outputs[0], box.inputs[0])
+    add = N("ShaderNodeMix")
+    add.data_type = "RGBA"
+    add.blend_type = "ADD"
+    add.inputs["Factor"].default_value = 1.0
+    nt.links.new(ramp.outputs["Color"], add.inputs[6])
+    nt.links.new(box.outputs[0], add.inputs[7])
+    env = N("ShaderNodeBackground")
+    env.inputs[1].default_value = 0.8
+    nt.links.new(add.outputs[2], env.inputs[0])
+    lp = N("ShaderNodeLightPath")
+    mix = N("ShaderNodeMixShader")
+    nt.links.new(lp.outputs["Is Camera Ray"], mix.inputs[0])
+    nt.links.new(env.outputs[0], mix.inputs[1])
+    nt.links.new(bg.outputs[0], mix.inputs[2])
+    out = nt.nodes.get("World Output")
+    nt.links.new(mix.outputs[0], out.inputs["Surface"])
 
 
 def render_views(objs, out_dir, views=("front", "three_quarter", "side", "back"), size=512, samples=12, prefix="view",

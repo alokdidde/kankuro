@@ -860,16 +860,27 @@ def make(res, ref_res, body_obj, gid, gtype, layer_rank=0, worn=None):
         at = placket_info(obj)
         if at is not None:
             uvinfo = dict(uvinfo, placket=dict(gdef["placket"], u=at[0], v=at[1]))
+    # edges tucked in at the waist (no border is drawn along them): a bottom's waistband, the pallu's
+    # and the dhoti pleats' first row
+    tucked = _top_open_verts(obj, 0.08) if gdef.get("slot") == "bottom" else []
     if gdef.get("drape") == "saree":
         from . import drape
         pallu = drape.pallu(res, body_obj, obj, worn, gdef, uvinfo)
+        nv = len(obj.data.vertices)
         with bpy.context.temp_override(active_object=obj, selected_editable_objects=[obj, pallu], object=obj):
             bpy.ops.object.join()
+        tucked += range(nv, nv + drape.COLS)
     if gdef.get("pleat_panel"):
         from . import dhoti
         panel = dhoti.front_pleats(res, body_obj, obj, gdef["pleat_panel"])
+        nv = len(obj.data.vertices)
         with bpy.context.temp_override(active_object=obj, selected_editable_objects=[obj, panel], object=obj):
             bpy.ops.object.join()
+        tucked += range(nv, nv + dhoti.COLS)
+    if tucked:
+        flag = np.zeros(len(obj.data.vertices), np.int32)
+        flag[list(tucked)] = 1
+        obj.data.attributes.new("tucked", "INT", "POINT").data.foreach_set("value", flag)
     obj["shell_faces"] = len(obj.data.polygons)  # solidify appends the inner shell and rims after these
     sol = obj.modifiers.new("thickness", "SOLIDIFY")
     sol.thickness = 0.0015
@@ -918,3 +929,76 @@ def seam_segments(obj):
             else:
                 seen[key] = (ua, ub)
     return segs
+
+
+def _top_open_verts(obj, depth):
+    """Vertices of the open edges within `depth` of the garment's top (a waistband)."""
+    me = obj.data
+    count = {}
+    for p in me.polygons:
+        vs = list(p.vertices)
+        for a, b in zip(vs, vs[1:] + vs[:1]):
+            k = (min(a, b), max(a, b))
+            count[k] = count.get(k, 0) + 1
+    co = util.get_coords(obj)
+    top = co[:, 2].max()
+    return sorted({v for k, c in count.items() if c == 1 for v in k if co[k[0], 2] > top - depth
+                   and co[k[1], 2] > top - depth})
+
+
+def edge_distance(obj, which="border", cap=0.2, uv_scale=None):
+    """Per-vertex distance (m, along the cloth) to its open edges: "border" = all of them (hems, neckline,
+    cuffs, a saree's long edges and pallu end), "hem" = only the lowest ones (bottom fifth of the open
+    edges' height range). Edges tucked in at the waist (the "tucked" attribute) are left out.
+
+    The distance is measured on the unfolded cloth: each step is the longer of its 3D length and its
+    UV length (uv_scale = UV units per metre). Pleats squeeze the layout but not the 3D cloth; the pallu
+    is gathered at the shoulder in 3D but laid out flat in UV. Vertices further than `cap` get `cap`."""
+    import heapq
+    me = obj.data
+    n = obj.get("shell_faces", len(me.polygons))
+    co = util.get_coords(obj)
+    uv = me.uv_layers["UVMap"].data if uv_scale and me.uv_layers else None
+    count, adj = {}, {}
+    for p in me.polygons[:n]:
+        vs = list(p.vertices)
+        li = list(p.loop_indices)
+        for i, (a, b) in enumerate(zip(vs, vs[1:] + vs[:1])):
+            key = (min(a, b), max(a, b))
+            count[key] = count.get(key, 0) + 1
+            w = float(np.linalg.norm(co[a] - co[b]))
+            if uv is not None:
+                w = max(w, float(np.hypot(*np.subtract(uv[li[i]].uv, uv[li[(i + 1) % len(li)]].uv))) / uv_scale)
+            adj.setdefault(a, {})[b] = max(w, adj.get(a, {}).get(b, 0.0))
+            adj.setdefault(b, {})[a] = adj[a][b]
+    open_ = [k for k, c in count.items() if c == 1]
+    dist = np.full(len(co), cap)
+    if not open_:
+        return dist
+    z = np.array([0.5 * (co[a, 2] + co[b, 2]) for a, b in open_])
+    keep = np.ones(len(open_), bool)
+    if "tucked" in me.attributes:
+        t = np.zeros(len(co), np.int32)
+        me.attributes["tucked"].data.foreach_get("value", t)
+        keep = np.array([not (t[a] and t[b]) for a, b in open_])
+    if which == "hem":
+        lo, hi = z.min(), z.max()
+        keep &= z < lo + 0.2 * (hi - lo) + 1e-4
+    heap = []
+    for (a, b), k in zip(open_, keep):
+        if k:
+            for v in (a, b):
+                if dist[v] > 0:
+                    dist[v] = 0.0
+                    heap.append((0.0, v))
+    heapq.heapify(heap)
+    while heap:
+        d, v = heapq.heappop(heap)
+        if d > dist[v]:
+            continue
+        for w, step in adj[v].items():
+            nd = d + step
+            if nd < dist[w]:
+                dist[w] = nd
+                heapq.heappush(heap, (nd, w))
+    return dist

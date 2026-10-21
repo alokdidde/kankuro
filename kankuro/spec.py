@@ -5,7 +5,7 @@ import os
 import re
 import shutil
 
-from . import appearance, catalog, morph
+from . import appearance, catalog, matlib, morph
 from .errors import CliError
 
 SPEC_FILE = "character.json"
@@ -132,6 +132,26 @@ def validate(spec, project):
         for key in ("texture", "normal", "height"):
             if g.get(key):
                 _check_file(project, g[key], f"garments[{g['id']}].{key}")
+        _check_material(project, g.get("material"), f"garments[{g['id']}].material")
+        for name, ref in (g.get("material_regions") or {}).items():
+            field = f"garments[{g['id']}].material_regions.{name}"
+            ref = _check_material(project, ref, field)
+            if name not in matlib.REGIONS and not ref.get("mask"):
+                raise CliError("bad_value", f"{field}: region '{name}' needs a mask",
+                               hint="Built-in regions: " + ", ".join(matlib.REGIONS) + "; others need \"mask\": <png>")
+
+
+def _check_material(project, ref, field):
+    if ref is None:
+        return None
+    ref = matlib.normalize(ref)
+    if "preset" not in ref:
+        raise CliError("bad_value", f"{field}: needs a preset name", hint='e.g. "gold" or {"preset": "gem", "color": "#1f5fbf"}')
+    matlib.check(ref["preset"], field)
+    color(ref.get("color"), field + ".color")
+    if ref.get("mask"):
+        _check_file(project, ref["mask"], field + ".mask")
+    return ref
 
 
 def _check_file(project, rel, field):

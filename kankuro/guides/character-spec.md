@@ -129,6 +129,8 @@ with a `source`.
 | `normal` | path | tangent-space normal map on the template (OpenGL, green up) |
 | `normal_strength` | number | scales the final normal map |
 | `roughness` | number | material roughness |
+| `material` | string or object | a material preset for the whole garment (`"bronze"`, or `{"preset": "gem", "color": "#1f5fbf", "roughness": 0.05}`); see [Materials](cli-reference.md#materials) |
+| `material_regions` | object | region name -> preset name or `{"preset", "color"?, "roughness"?, "width"?, "mask"?}`. Built-in regions `border` and `hem` (a band `width` metres wide along the open edges); any other name needs `mask`, a PNG on the UV template |
 | `layer` | int | stacking order override; higher is further out |
 | `hide_body` | bool | `false` keeps the skin under this garment |
 

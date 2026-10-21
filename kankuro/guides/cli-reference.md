@@ -195,11 +195,12 @@ Prints `{"changed": {...}, "spec": {...}}`. Errors: `bad_assignment`, `bad_path`
 List what's available.
 
 ```
-kankuro catalog [presets|body_sliders|face_sliders|face_presets|colors|brows|hair_styles|garments|fabrics|expressions]
+kankuro catalog [presets|body_sliders|face_sliders|face_presets|colors|brows|hair_styles|garments|fabrics|materials|expressions]
 ```
 
 With no section it prints everything. Garment entries include `slot`, `layer` and default
-`fabric`. `expressions` lists the 52 ARKit blendshape names and the expression presets. See [Garment types](#garment-types) for the current list.
+`fabric`. `materials` lists the [material presets](#materials) with their parameter values and the
+built-in regions. `expressions` lists the 52 ARKit blendshape names and the expression presets. See [Garment types](#garment-types) for the current list.
 
 ### morphs
 
@@ -509,6 +510,7 @@ Prints `{"hair": {...}}` (`null` after `remove`).
 kankuro garment add <type> [--id ID] [--color HEX] [--texture PNG] [--fabric NAME] [--keep-slot] [surface options]
 kankuro garment import --file MESH --id ID [--color HEX] [--texture PNG] [surface options]
 kankuro garment set <id> [--color HEX] [--texture PNG|""] [--layer N] [--hide-body true|false] [surface options]
+kankuro garment set <id> [--material PRESET|none] [--material-region NAME=PRESET[:#RRGGBB]] [--mask PNG]
 kankuro garment remove <id>
 ```
 
@@ -532,6 +534,9 @@ and body skin under clothing is hidden so it can't poke through. `--layer N` ove
 | `--normal` | all | tangent-space normal map PNG (OpenGL, green = up) on the template; blended in. `""` removes it |
 | `--normal-strength` | all | scale for the final normal map (default 1.0) |
 | `--roughness` | all | material roughness |
+| `--material` | all | a [material preset](#materials) for the whole garment (`bronze` armour, `gold` lamé); `none` removes it. Without `--color` in the same command the preset's own colour is used |
+| `--material-region` | all | `NAME=PRESET[:#RRGGBB]`: a region of the UV template in another material, e.g. `border=gold_zari`. Built-in regions: `border`, `hem`; any other name needs `--mask`. `PRESET` `none` removes the region. Repeatable |
+| `--mask` | all | greyscale PNG on the garment's UV template (white = in the region) for the `--material-region` in the same command |
 | `--layer` | all | stacking order override |
 | `--hide-body` | all | `false` keeps the body skin under this garment |
 | `--keep-slot` | add, import | don't replace the garment already in this slot |
@@ -581,6 +586,54 @@ kankuro garment set jacket --texture ./camo.png --height ./camo_height.png
 kankuro garment remove jacket
 ```
 
+#### Materials
+
+Metal, gem, pearl, lacquer and zari presets. Each is a set of Principled BSDF values that exports as glTF
+PBR metallic-roughness: gems add `KHR_materials_transmission` and `KHR_materials_ior`, lacquer and pearl
+add a clear coat, steel a brushed (anisotropic) highlight, pearl a thin-film shimmer. A metal's colour is
+the colour of its reflection, so the swatch colours look pale and the renders rich.
+
+| preset | | kind | colour | metallic | roughness | extra |
+|---|---|---|---|---|---|---|
+| `gold` | ![gold](images/materials/gold.jpg) | metal | `#fcd88a` | 1 | 0.2 | |
+| `rose_gold` | ![rose_gold](images/materials/rose_gold.jpg) | metal | `#f7c9ae` | 1 | 0.22 | |
+| `brass` | ![brass](images/materials/brass.jpg) | metal | `#f2d892` | 1 | 0.3 | |
+| `bronze` | ![bronze](images/materials/bronze.jpg) | metal | `#d9a878` | 1 | 0.38 | |
+| `silver` | ![silver](images/materials/silver.jpg) | metal | `#fbf8f2` | 1 | 0.16 | |
+| `steel` | ![steel](images/materials/steel.jpg) | metal | `#c8c9cb` | 1 | 0.28 | anisotropy 0.5 |
+| `iron_dark` | ![iron_dark](images/materials/iron_dark.jpg) | metal | `#6e6b67` | 1 | 0.55 | |
+| `gem` | ![gem](images/materials/gem.jpg) | gem | `#c2102e` (set with `--color`) | 0 | 0.02 | transmission 1, IOR 1.76 |
+| `pearl` | ![pearl](images/materials/pearl.jpg) | dielectric | `#f1ebdf` | 0 | 0.32 | coat 0.8, subsurface 0.15, thin film 380 nm |
+| `gold_zari` | ![gold_zari](images/materials/gold_zari.jpg) | thread | `#e6c27a` | 0.85 | 0.38 | keeps the fabric's weave relief |
+| `lacquer` | ![lacquer](images/materials/lacquer.jpg) | dielectric | `#8a1a17` (set with `--color`) | 0 | 0.4 | coat 1 |
+
+`kankuro catalog materials` prints the same values. A region of a garment takes a preset's colour,
+metallic and roughness through a metallic-roughness texture, and keeps the cloth's weave relief, folds
+and occlusion; transmission, coat and anisotropy apply only to a whole-garment `--material`.
+
+**Regions.** `border` is a band along every open edge of the cloth (hems, neckline, cuffs, a saree's
+long edges and the pallu end), not along sewn seams or edges tucked in at the waist. `hem` is the
+band along the lowest open edges only. The band is measured on the unfolded cloth, so it keeps its
+width through pleats. Its width comes from the garment type (7 cm on a `saree`, 4.5 cm on a `dhoti`,
+1.5 cm on a `kurta`, 2.5 cm otherwise) or from `width` in the spec. `kankuro template` writes both
+masks (`<id>_border_mask.png`, `<id>_hem_mask.png`); paint over one to make your own region and pass
+it with `--mask`.
+
+A material change is a spec edit: `render` and `build` pick it up, nothing else needs rebuilding.
+
+![A saree with a gold zari border](images/materials/saree_gold_zari.jpg)
+
+```bash
+kankuro garment set saree --material-region border=gold_zari
+kankuro garment set pants --material-region hem=gem:#1f5fbf
+kankuro garment set kurta --material-region trim=silver --mask ./kurta_trim_mask.png
+kankuro garment import --file armour.glb --id kavach --material bronze
+kankuro garment set kavach --material none     # back to the mesh's own materials
+kankuro catalog materials
+```
+
+The swatches come from `python tools/material_swatches.py`.
+
 ### template
 
 Write UV templates so an image model (or a person) can paint new garment textures.
@@ -596,7 +649,8 @@ kankuro template [TARGET ...] [--out DIR] [--size PX]
 | `--size` | 2048 | image size in pixels (square) |
 
 For each target it writes `<id>_template.png` (the garment's flat sketch, seam lines and labels on a
-white background) and `<id>_mask.png` (white where the texture is used). For most garments the
+white background) and `<id>_mask.png` (white where the texture is used), plus the built-in
+[material regions](#materials) `<id>_border_mask.png` and `<id>_hem_mask.png`. For most garments the
 **left half is the front** and the **right half is the back, seen from behind**. The `saree` has its
 own layout, described in its template's labels.
 
@@ -608,7 +662,7 @@ kankuro template tshirt            # templates/tshirt_template.png + tshirt_mask
 kankuro template body --size 4096  # skin layout for `kankuro skin --texture`
 ```
 
-Prints `{"templates": {"<id>": {"template", "mask", "layout", "size"}}, "how_to_retexture": "..."}`.
+Prints `{"templates": {"<id>": {"template", "mask", "border_mask", "hem_mask", "layout", "size"}}, "how_to_retexture": "..."}`.
 Imported (custom) garments keep their own UVs and fail with `custom_garment`.
 
 The full retexturing workflow, with ready-made image-model prompts, is in
@@ -834,7 +888,7 @@ text, like `guide`.
 | `bad_path` | `set` on a path that can't be set | see the table under [set](#set) |
 | `bad_value` | wrong type or out of range | read `message` |
 | `bad_color` | not a hex colour or a known colour name | `#RRGGBB` or a name from [Colour names](#colour-names) |
-| `unknown_preset`, `unknown_macro`, `unknown_modifier`, `unknown_hair`, `unknown_garment`, `unknown_fabric`, `unknown_animation` | a name not in the catalog | `hint` lists valid names |
+| `unknown_preset`, `unknown_macro`, `unknown_modifier`, `unknown_hair`, `unknown_garment`, `unknown_fabric`, `unknown_material`, `unknown_animation` | a name not in the catalog | `hint` lists valid names |
 | `duplicate_garment` | a garment with that id exists | `--id <other>` or `garment set` |
 | `no_garment` | no garment with that id | `hint` lists current ids |
 | `custom_garment` | `template` on an imported garment | it keeps its own UVs |

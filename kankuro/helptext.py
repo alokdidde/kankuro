@@ -187,9 +187,13 @@ hair colour names: {hair_colors}""",
   kankuro garment add jacket --color "#556b2f" --fabric denim
   kankuro garment set jacket --texture ./camo.png --height ./camo_height.png
   kankuro garment import --file hat.glb --id hat --color "#6b4f2a"
+  kankuro garment set saree --material-region border=gold_zari    # gold zari border on the saree
+  kankuro garment set kurta --material-region trim=silver --mask ./kurta_trim_mask.png
+  kankuro garment import --file armour.glb --id kavach --material bronze
   kankuro garment remove jacket
 types: {garments}
 fabrics: {fabrics}
+materials: {materials}  (`kankuro catalog materials` lists their values)
 custom prints: `kankuro template <id>`, paint it outside kankuro, then `garment set <id> --texture <png>`
 (`kankuro guide textures` has image-model prompts)""",
         args={"action": "add | import | set | remove",
@@ -202,11 +206,17 @@ custom prints: `kankuro template <id>`, paint it outside kankuro, then `garment 
               "roughness": "material roughness",
               "hide_body": "false keeps the skin under this garment",
               "normal_strength": "scale for the final normal map (default 1.0)",
+              "material": "material preset for the whole garment (gold, bronze, steel...) or none; without "
+                          "--color the preset's own colour is used",
+              "material_region": "NAME=PRESET[:#RRGGBB] a region of the UV template in another material "
+                                 "(border, hem, or any name with --mask); PRESET none removes it; repeatable",
+              "mask": "greyscale PNG on the garment's UV template, white = in the region",
               "keep_slot": "don't replace the garment already in this slot"}),
     "template": dict(
         summary="write UV template + mask PNGs for repainting garments or skin",
         description="For each target writes <id>_template.png (flat sketch: left half = front, right half "
-                    "= back seen from behind) and <id>_mask.png (white where the texture is used). One "
+                    "= back seen from behind) and <id>_mask.png (white where the texture is used), plus "
+                    "<id>_border_mask.png and <id>_hem_mask.png (the built-in material regions). One "
                     "texture fits that garment type on every body shape.",
         examples="""\
   kankuro template tshirt
@@ -318,6 +328,8 @@ def names():
     from . import catalog, morph, spec
     out = {"presets": ", ".join(spec.PRESETS), "sliders": ", ".join(morph.MACROS),
            "hair_styles": ", ".join(catalog.HAIR_STYLES), "garments": ", ".join(catalog.GARMENTS)}
+    from . import matlib
+    out["materials"] = ", ".join(matlib.MATERIALS)
     try:
         from . import fabric
         out["fabrics"] = ", ".join(fabric.FABRICS) + ", none"

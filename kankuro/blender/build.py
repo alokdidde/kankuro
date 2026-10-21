@@ -287,6 +287,42 @@ def hide_body(body_obj, covers, max_dist=0.06, hanging=(), legs=None):
     return len(kill)
 
 
+def region_mask(gobj, name, size, uv_per_m, width, project=None, mask_path=None):
+    """0..1 mask (size x size) of a material region on a garment's UV template: a user PNG (white =
+    in the region), or a band `width` metres wide (measured on the cloth) along its open edges
+    ("border") or lowest hems ("hem")."""
+    from PIL import Image
+
+    from .. import fabric
+    if mask_path:
+        im = Image.open(os.path.join(project, mask_path) if project else mask_path).convert("L")
+        return np.asarray(im.resize((size, size), Image.BILINEAR)).astype(np.float32) / 255
+    d = garments.edge_distance(gobj, name, cap=2 * width, uv_scale=uv_per_m)
+    me = gobj.data
+    me.calc_loop_triangles()
+    n = gobj.get("shell_faces", len(me.polygons))
+    tris = [t for t in me.loop_triangles if t.polygon_index < n]
+    uv = me.uv_layers["UVMap"].data
+    tri_uv = np.array([[uv[li].uv for li in t.loops] for t in tris])
+    tri_d = np.array([[d[v] for v in t.vertices] for t in tris])[..., None]
+    dm, cov = fabric.raster_attr(tri_uv, tri_d, size, bleed=4)
+    # distance is interpolated per texel, so the band's inner edge is a clean line, slightly softened
+    soft = 0.0015
+    return np.clip((width - dm[..., 0]) / soft * 0.5 + 0.5, 0, 1) * fabric.blur(cov.astype(np.float32), 1, 1)
+
+
+def _regions(g, gobj, size, uv_per_m, project):
+    """[(mask, resolved preset)] for a garment's material_regions."""
+    from .. import matlib
+    out = []
+    width0 = catalog.GARMENTS.get(g.get("type"), {}).get("border", 0.025)
+    for name, ref in (g.get("material_regions") or {}).items():
+        ref = matlib.normalize(ref)
+        m = region_mask(gobj, name, size, uv_per_m, ref.get("width", width0), project, ref.get("mask"))
+        out.append((m, matlib.resolve(ref)))
+    return out
+
+
 def _garment_materials(items, project, work_dir, spec, b):
     """Bake albedo + normal maps for garments (fabric preset, stitching, creases, AO, optional user maps)
     and assign their materials.
@@ -295,7 +331,7 @@ def _garment_materials(items, project, work_dir, spec, b):
     The Blender-side sampling runs first; the numpy texture bakes then run in parallel threads."""
     from concurrent.futures import ThreadPoolExecutor
 
-    from .. import fabric
+    from .. import fabric, matlib
     from . import clothshade
     size = int(spec["export"].get("texture_size", 2048))
     jobs = []
@@ -304,10 +340,12 @@ def _garment_materials(items, project, work_dir, spec, b):
         fab = g.get("fabric", gdef.get("fabric", "cotton"))
         color = g.get("color") or "#8a8f99"
         tex = os.path.join(project, g["texture"]) if g.get("texture") else None
+        finish = matlib.resolve(g["material"], g.get("color"), g.get("roughness")) if g.get("material") else None
         gobj.data.materials.clear()
-        if not gobj.data.uv_layers or (fab == "none" and not g.get("normal") and not g.get("height")):
-            gobj.data.materials.append(materials.make(f"Garment_{g['id']}", color=color, image_path=tex,
-                                                      roughness=g.get("roughness", 0.8), double_sided=True))
+        if not gobj.data.uv_layers or (fab == "none" and not g.get("normal") and not g.get("height")
+                                       and not g.get("material_regions")):
+            kw = materials.preset_kwargs(finish) if finish else dict(color=color, roughness=g.get("roughness", 0.8))
+            gobj.data.materials.append(materials.make(f"Garment_{g['id']}", image_path=tex, double_sided=True, **kw))
             continue
         mask, uv_per_m, seams = None, 0.45, None
         if g["id"] in b.uv_info:
@@ -321,15 +359,21 @@ def _garment_materials(items, project, work_dir, spec, b):
                   height_path=os.path.join(project, g["height"]) if g.get("height") else None,
                   normal_path=os.path.join(project, g["normal"]) if g.get("normal") else None,
                   strength=float(g.get("normal_strength", 1.0)), ao=ao, chain_s=chain_s, crease_w=crease_w,
-                  detail=detail, seams=seams, placket_spec=(b.uv_info.get(g["id"]) or {}).get("placket"))
+                  detail=detail, seams=seams, placket_spec=(b.uv_info.get(g["id"]) or {}).get("placket"),
+                  finish=finish, roughness=g.get("roughness"),
+                  regions=_regions(g, gobj, size, uv_per_m, project) if gobj.data.uv_layers else ())
         jobs.append((g, gobj, os.path.join(work_dir, f"garment_{g['id']}"), uv_per_m, kw))
     with ThreadPoolExecutor(max_workers=min(4, max(1, len(jobs)))) as ex:
         results = list(ex.map(lambda j: fabric.bake(j[2], size, j[3], **j[4]), jobs))
-    for (g, gobj, *_), (albedo, normal, m) in zip(jobs, results):
+    for (g, gobj, *_, kw), (albedo, normal, m) in zip(jobs, results):
+        extra = materials.preset_kwargs(kw["finish"]) if kw["finish"] else {}
+        extra.pop("color", None)
+        extra.setdefault("specular", m["specular"])
+        extra.update(roughness=m["roughness"], metallic=m["metallic"])
         gobj.data.materials.append(materials.make(
-            f"Garment_{g['id']}", image_path=albedo, roughness=g.get("roughness", m["roughness"]),
-            double_sided=True, normal_path=normal, specular=m["specular"], sheen=m["sheen"],
-            sheen_roughness=m["sheen_roughness"], sheen_tint=m["sheen_tint"]))
+            f"Garment_{g['id']}", image_path=albedo, double_sided=True, normal_path=normal,
+            roughness_path=m["mr"], metallic_path=m["mr"], sheen=m["sheen"],
+            sheen_roughness=m["sheen_roughness"], sheen_tint=m["sheen_tint"], **extra))
 
 
 def layer_of(g):
@@ -467,7 +511,8 @@ def build_scene(spec, project, work_dir):
             # keep it outside the skin and anything already worn
             garments.conform(gobj, garments.body_bvh(body_obj), 0.003 + 0.003 * rank)
             util.add_armature_modifier(gobj, res.arm)
-            keep_mats = not g.get("texture") and not g.get("color") and len(gobj.data.materials) > 0
+            keep_mats = (not g.get("texture") and not g.get("color") and not g.get("material")
+                         and len(gobj.data.materials) > 0)
         else:
             # stack over lower layers only; footwear always sits under hems rather than over them
             under = [o for o, l in covers_all if l < layer_of(g)]

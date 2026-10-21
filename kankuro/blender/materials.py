@@ -18,7 +18,8 @@ def srgb_to_linear(c):
 
 def make(name, color=None, image_path=None, roughness=0.6, metallic=0.0, double_sided=False,
          normal_path=None, normal_strength=1.0, subsurface=0.0, specular=None, sheen=0.0, sheen_roughness=0.5,
-         sheen_tint=(1.0, 1.0, 1.0), roughness_path=None, subsurface_radius=(1.0, 0.35, 0.2), coat=0.0):
+         sheen_tint=(1.0, 1.0, 1.0), roughness_path=None, subsurface_radius=(1.0, 0.35, 0.2), coat=0.0,
+         coat_roughness=0.03, metallic_path=None, transmission=0.0, ior=None, anisotropy=0.0, thin_film=0.0):
     mat = bpy.data.materials.new(name)
     nt = mat.node_tree
     bsdf = nt.nodes.get("Principled BSDF")
@@ -39,10 +40,21 @@ def make(name, color=None, image_path=None, roughness=0.6, metallic=0.0, double_
         sep = nt.nodes.new("ShaderNodeSeparateColor")
         nt.links.new(rtex.outputs["Color"], sep.inputs["Color"])
         nt.links.new(sep.outputs["Green"], bsdf.inputs["Roughness"])
+        if metallic_path == roughness_path:  # one glTF metallicRoughness map: metallic in B
+            nt.links.new(sep.outputs["Blue"], bsdf.inputs["Metallic"])
     bsdf.inputs["Metallic"].default_value = metallic
     if coat:
         bsdf.inputs["Coat Weight"].default_value = coat
-        bsdf.inputs["Coat Roughness"].default_value = 0.03
+        bsdf.inputs["Coat Roughness"].default_value = coat_roughness
+    if transmission:  # gems: exports as KHR_materials_transmission + KHR_materials_ior
+        bsdf.inputs["Transmission Weight"].default_value = transmission
+    if ior:
+        bsdf.inputs["IOR"].default_value = ior
+    if anisotropy:
+        bsdf.inputs["Anisotropic"].default_value = anisotropy
+    if thin_film:  # nacre shimmer (KHR_materials_iridescence)
+        bsdf.inputs["Thin Film Thickness"].default_value = thin_film
+        bsdf.inputs["Thin Film IOR"].default_value = 1.5
     if subsurface:
         # skin: light scatters further in red, which softens shading and kills the plastic look
         bsdf.subsurface_method = "RANDOM_WALK_SKIN"
@@ -66,6 +78,17 @@ def make(name, color=None, image_path=None, roughness=0.6, metallic=0.0, double_
         bsdf.inputs["Base Color"].default_value = (r, g, b, 1)
     mat.use_backface_culling = not double_sided
     return mat
+
+
+def preset_kwargs(p):
+    """materials.make() keyword arguments for a resolved matlib preset (matlib.resolve)."""
+    kw = dict(color=p["color"], metallic=p["metallic"], roughness=p["roughness"])
+    for k in ("specular", "coat", "coat_roughness", "transmission", "ior", "anisotropy", "thin_film", "subsurface"):
+        if p.get(k):
+            kw[k] = p[k]
+    if p.get("subsurface"):
+        kw["subsurface_radius"] = (0.6, 0.5, 0.4)
+    return kw
 
 
 def make_hair(name, image_path, roughness=0.55, anisotropic=0.45, cutoff=0.4):

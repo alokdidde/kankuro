@@ -53,6 +53,15 @@ The maps are written to `build/work/garment_<id>_albedo.jpg` and `_normal.jpg` a
 and `normalTexture`. `export.texture_size` (default 2048) sets their resolution.
 [docs/codex-textures.md](codex-textures.md) has the exact image-model prompts and file specs.
 
+**Metal, gems and zari.** `--material PRESET` gives a whole garment a material preset (gold, bronze,
+steel, gem, pearl, lacquer...; `catalog materials`), and `--material-region border=gold_zari` puts a
+preset on part of the UV template: a band along the open edges (`border`, `hem`) measured on the
+unfolded cloth, or your own `--mask`. A region takes the preset's colour, metallic and roughness through
+a glTF metallic-roughness texture (`build/work/garment_<id>_mr.png`) and keeps the cloth's weave relief,
+folds and occlusion, so a zari border still reads as woven thread. `render` shows metal against a
+studio environment (bright ceiling, darker floor, two softbox strips) that only reflections see; the
+backdrop stays plain grey. [Materials](cli-reference.md#materials) has an image of every preset.
+
 The UV layout comes from a fixed reference body, so **one texture fits that garment on every body
 shape**. `kankuro template body` gives the skin layout (MakeHuman UVs) for `kankuro skin --texture`.
 

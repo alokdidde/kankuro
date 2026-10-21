@@ -67,6 +67,7 @@ HAIR_STYLES = {
 #          count/depth, flare at the hem, hem_up = how far its hem is above the legs' hem)
 #   waist_roll / tuck: a rolled waistband (height, bulge) / the kachha gathered in at the centre back
 #   gathers: bunched rings of cloth over the lower leg, from `from` (0 = knee, 1 = ankle)
+#   border: width (m) of the "border"/"hem" material regions along the open edges (default 0.025)
 GARMENTS = {
     "tshirt": {
         "fabric": "jersey", "desc": "Short-sleeve crew-neck T-shirt", "slot": "top", "layer": 1, "offset": 0.006,
@@ -115,6 +116,7 @@ GARMENTS = {
         "neckline": {"radius": 0.085, "front": 0.14, "back": 0.09},
     },
     "saree": {
+        "border": 0.07,
         "fabric": "silk", "desc": "Saree in the Nivi drape: floor-length skirt with front pleats and the pallu over "
                                   "the left shoulder, hanging down the back (wear over a blouse)",
         "slot": "bottom", "layer": 3, "offset": 0.004, "source_group": "helper-skirt", "length": 1.0,
@@ -141,6 +143,7 @@ GARMENTS = {
                     "middle_*": [0, 1], "ring_*": [0, 1], "pinky_*": [0, 1]},
     },
     "dhoti": {
+        "border": 0.045,
         "fabric": "cotton", "desc": "Draped dhoti: loose woven-cotton legs from the waist to mid-calf, a pleated "
                                     "front panel hanging between the legs, rolled waist, kachha tuck at the back",
         "slot": "bottom", "layer": 2, "offset": 0.008, "loose": 0.06,
@@ -157,6 +160,7 @@ GARMENTS = {
                    "depth": 0.009},
     },
     "kurta": {
+        "border": 0.015,
         "fabric": "cotton", "desc": "Loose knee-length tunic worn over a dhoti or churidar: band collar, buttoned "
                                     "front placket, 3/4 sleeves, side slits from the hip down",
         "slot": "top", "layer": 3, "offset": 0.008, "weight_smooth": 16, "hang": 0.025,
