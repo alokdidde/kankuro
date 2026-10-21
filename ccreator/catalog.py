@@ -25,12 +25,12 @@ GARMENTS = {
     "tshirt": {
         "fabric": "cotton", "desc": "Short-sleeve crew-neck T-shirt", "slot": "top", "layer": 1, "offset": 0.006,
         "regions": {"torso": [0.1, 1], "clavicle_*": [0, 1], "upperarm_*": [0, 0.45]},
-        "neckline": {"radius": 0.07, "front": 0.085, "back": 0.04},
+        "neckline": {"radius": 0.085, "front": 0.11, "back": 0.04},
     },
     "longsleeve": {
         "fabric": "cotton", "desc": "Long-sleeve crew-neck top", "slot": "top", "layer": 1, "offset": 0.006,
         "regions": {"torso": [0.1, 1], "clavicle_*": [0, 1], "upperarm_*": [0, 1], "lowerarm_*": [0, 0.92]},
-        "neckline": {"radius": 0.07, "front": 0.085, "back": 0.04},
+        "neckline": {"radius": 0.085, "front": 0.11, "back": 0.04},
     },
     "tanktop": {
         "fabric": "cotton", "desc": "Sleeveless tank top", "slot": "top", "layer": 1, "offset": 0.005,

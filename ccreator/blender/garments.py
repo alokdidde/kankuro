@@ -74,9 +74,9 @@ def _neck_hole(co, neck, radius, front, back):
     fwd = np.clip(-d[:, 1] / np.maximum(r, 1e-6), -1, 1)  # +1 straight ahead (characters face -Y)
     w = (0.5 + 0.5 * fwd) ** 2
     drop = back + (front - back) * w
-    # the neck is set back on the shoulders: widen the opening behind and beside it so the back
-    # doesn't ride up the neck in flaps
-    rad = radius * (1 + 0.25 * (1 - w))
+    # the neck is set back on the shoulders, so the opening reaches further forward than back:
+    # a scoop that clears the hollow of the throat instead of leaving a tab standing up there
+    rad = radius * (1 + 0.6 * w)
     return (r < rad) & (co[:, 2] > neck.z - drop)
 
 
