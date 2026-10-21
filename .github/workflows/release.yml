@@ -1,6 +1,7 @@
 name: Release
 
-# Push a tag like v0.2.0 to publish a GitHub release with:
+# Publish a GitHub release by pushing a tag like v0.2.0, or by pushing the commit to the `release`
+# branch (git push origin main:release), which tags it v<pyproject version>. The release has:
 #   - kankuro-<v>-py3-none-any.whl + sdist  (pip/uv install; pulls the right bpy wheel per platform)
 #   - self-contained bundles (Python 3.13 + bpy + kankuro) for Linux x64, macOS arm64,
 #     Windows x64 and Windows arm64, each smoke-tested on its own runner
@@ -11,6 +12,7 @@ name: Release
 on:
   push:
     tags: ["v*"]
+    branches: [release]
   pull_request:
     paths:
       - .github/workflows/release.yml
@@ -106,11 +108,13 @@ jobs:
 
   release:
     name: Publish GitHub release
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/release'
     needs: [test, dist, bundle]
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      TAG: v${{ needs.dist.outputs.version }}
     steps:
       - uses: actions/download-artifact@v5
         with:
@@ -138,13 +142,14 @@ jobs:
           Full instructions: https://github.com/${{ github.repository }}/blob/main/docs/installation.md
 
           NOTES
-          gh release create "$GITHUB_REF_NAME" assets/* --repo "$GITHUB_REPOSITORY" \
-            --title "kankuro $GITHUB_REF_NAME" --notes-file notes.md --generate-notes
+          # Creates the tag at this commit when it came from the release branch; fails if the release exists.
+          gh release create "$TAG" assets/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "kankuro $TAG" --notes-file notes.md --generate-notes
 
   pypi:
     name: Publish to PyPI
     # Off until PyPI trusted publishing is set up (docs/releasing.md); then set the repo variable PUBLISH_PYPI=true.
-    if: startsWith(github.ref, 'refs/tags/v') && vars.PUBLISH_PYPI == 'true'
+    if: (startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/release') && vars.PUBLISH_PYPI == 'true'
     needs: [test, dist, bundle]
     runs-on: ubuntu-latest
     environment: pypi

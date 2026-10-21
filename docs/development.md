@@ -82,11 +82,13 @@ python tools/smoke_test.py ./unpacked/kankuro-0.1.0-linux-x64/kankuro     # afte
 
 1. Bump the version in **both** `pyproject.toml` (`version`) and `ccreator/cli.py` (`VERSION`).
    The workflow refuses to release if they or the tag disagree.
-2. Commit, then tag and push:
+2. Commit and push to `main`, then either push a tag or push `main` to the `release` branch
+   (which tags the release `v<version>` for you, handy where tag pushes aren't allowed):
 
    ```bash
-   git tag v0.2.0
-   git push origin main v0.2.0
+   git tag v0.2.0 && git push origin main v0.2.0
+   # or
+   git push origin main:release
    ```
 
 3. [`.github/workflows/release.yml`](../.github/workflows/release.yml) then:
