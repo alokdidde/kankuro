@@ -597,6 +597,32 @@ def cmd_validate(a):
     return r
 
 
+GUIDES = {
+    "agents": ("agents.md", "driving kankuro from an AI agent: JSON contract, working loop, system prompt"),
+    "start": ("getting-started.md", "ten-minute walk-through: body, face, hair, clothes, textures, GLB"),
+    "cli": ("cli-reference.md", "every command, option, output and error code"),
+    "spec": ("character-spec.md", "the character.json format"),
+    "textures": ("codex-textures.md", "image-model prompts and file specs for garment textures"),
+    "install": ("installation.md", "installing, platforms, troubleshooting"),
+}
+
+
+def _guide_text(topic):
+    if topic not in GUIDES:
+        raise CliError("unknown_topic", f"Unknown guide topic '{topic}'", hint=f"Valid: {', '.join(GUIDES)}")
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "guides", GUIDES[topic][0])
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+    others = ", ".join(t for t in GUIDES if t != topic)
+    return text.rstrip() + f"\n\n---\nMore: `kankuro guide <topic>` ({others}), `kankuro <command> --help`.\n"
+
+
+def cmd_guide(a):
+    if a.list:
+        return {"topics": {k: v[1] for k, v in GUIDES.items()}, "usage": "kankuro guide <topic>"}
+    return {"topic": a.topic, "text": _guide_text(a.topic)}
+
+
 def cmd_schema(a):
     return {"version": VERSION, "commands": SCHEMA, "spec_file": specmod.SPEC_FILE,
             "conventions": {
@@ -605,7 +631,8 @@ def cmd_schema(a):
                 "rest_pose": "T-pose matching Mesh2Motion rig-human",
                 "skeleton": "Mesh2Motion human: 65 bones, Unreal-style names (pelvis, spine_01..03, clavicle_l, ...)",
                 "output": "one JSON object per command on stdout",
-            }}
+            },
+            "learn_more": "kankuro guide (agent guide, plain text), kankuro guide --list, kankuro <command> --help"}
 
 
 SCHEMA = {
@@ -637,34 +664,44 @@ SCHEMA = {
     "autorig <mesh> --out GLB [--facing auto|-y|+y|-x|+x] [--animations A,B] [--render DIR]": "rig any humanoid mesh to the Mesh2Motion skeleton",
     "validate <glb>": "check a GLB against the Mesh2Motion human standard",
     "schema": "this description",
+    "guide [topic] [--list] [--json]": "print a usage guide as plain text (default: the agent guide)",
 }
 
 
 def parser():
-    ap = argparse.ArgumentParser(prog="kankuro", description="Character creator CLI (JSON output).")
+    from . import helptext
+    names = helptext.names()
+    ap = argparse.ArgumentParser(prog="kankuro", description=helptext.TOP_DESCRIPTION,
+                                 epilog=helptext.TOP_EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("-p", "--project", help="project directory (default: $KANKURO_PROJECT or cwd)")
     ap.add_argument("--version", action="version", version=VERSION)
-    sp = ap.add_subparsers(dest="cmd", required=True)
+    sp = ap.add_subparsers(dest="cmd", required=True, metavar="<command>")
 
-    x = sp.add_parser("init")
+    def _sub(name):
+        h = helptext.COMMANDS[name]
+        return sp.add_parser(name, help=h["summary"], description=h["description"],
+                             epilog="examples:\n" + helptext.fill(h["examples"], names),
+                             formatter_class=argparse.RawDescriptionHelpFormatter)
+
+    x = _sub("init")
     x.add_argument("dir")
     x.add_argument("--preset", default="neutral")
     x.add_argument("--name")
     x.add_argument("--force", action="store_true")
-    sp.add_parser("show")
-    x = sp.add_parser("set")
+    _sub("show")
+    x = _sub("set")
     x.add_argument("assignments", nargs="+")
-    x = sp.add_parser("catalog")
+    x = _sub("catalog")
     x.add_argument("section", nargs="?")
-    x = sp.add_parser("morphs")
+    x = _sub("morphs")
     x.add_argument("--group")
     x.add_argument("--search")
-    x = sp.add_parser("skin")
+    x = _sub("skin")
     x.add_argument("--color")
     x.add_argument("--texture")
     x.add_argument("--brow-color")
 
-    x = sp.add_parser("face")
+    x = _sub("face")
     x.add_argument("action", choices=["list", "set", "preset", "randomize", "reset"])
     x.add_argument("values", nargs="*")
     x.add_argument("--group")
@@ -673,10 +710,10 @@ def parser():
     x.add_argument("--strength", type=float, default=0.5)
     x.add_argument("--amount", type=float, default=1.0)
     x.add_argument("--add", action="store_true", help="add to the current sliders instead of replacing them")
-    x = sp.add_parser("eyes")
+    x = _sub("eyes")
     x.add_argument("values", nargs="*")
     x.add_argument("--color")
-    x = sp.add_parser("brows")
+    x = _sub("brows")
     x.add_argument("values", nargs="*")
     x.add_argument("--preset")
     x.add_argument("--color")
@@ -685,14 +722,14 @@ def parser():
     x.add_argument("--on", action="store_true")
     x.add_argument("--off", action="store_true")
 
-    x = sp.add_parser("hair")
+    x = _sub("hair")
     x.add_argument("action", choices=["set", "import", "remove"])
     x.add_argument("style", nargs="?")
     x.add_argument("--color")
     x.add_argument("--texture")
     x.add_argument("--file")
 
-    x = sp.add_parser("garment")
+    x = _sub("garment")
     x.add_argument("action", choices=["add", "import", "set", "remove"])
     x.add_argument("type", nargs="?", help="garment type (add) or id (set/remove)")
     x.add_argument("--id")
@@ -708,19 +745,19 @@ def parser():
     x.add_argument("--normal-strength", type=float)
     x.add_argument("--keep-slot", action="store_true")
 
-    x = sp.add_parser("template")
+    x = _sub("template")
     x.add_argument("targets", nargs="*")
     x.add_argument("--out")
     x.add_argument("--size", type=int, default=2048)
 
-    x = sp.add_parser("build")
+    x = _sub("build")
     x.add_argument("--out")
     x.add_argument("--animations")
     x.add_argument("--render", action="store_true")
     x.add_argument("--size", type=int, default=512)
     x.add_argument("--samples", type=int, default=12)
 
-    x = sp.add_parser("render")
+    x = _sub("render")
     x.add_argument("--views")
     x.add_argument("--focus", choices=["full", "upper", "head"])
     x.add_argument("--animation")
@@ -731,12 +768,12 @@ def parser():
     x.add_argument("--out")
     x.add_argument("--prefix")
 
-    sp.add_parser("animations")
-    x = sp.add_parser("reference-body")
+    _sub("animations")
+    x = _sub("reference-body")
     x.add_argument("--out", required=True)
     x.add_argument("--with-rig", action="store_true")
 
-    x = sp.add_parser("autorig")
+    x = _sub("autorig")
     x.add_argument("mesh")
     x.add_argument("--out", required=True)
     x.add_argument("--facing", default="auto", choices=["auto", "-y", "+y", "-x", "+x"])
@@ -744,9 +781,20 @@ def parser():
     x.add_argument("--render")
     x.add_argument("--method", default="auto", choices=["auto", "heat", "proximity"])
 
-    x = sp.add_parser("validate")
+    x = _sub("validate")
     x.add_argument("glb")
-    sp.add_parser("schema")
+    _sub("schema")
+    x = _sub("guide")
+    x.add_argument("topic", nargs="?", default="agents")
+    x.add_argument("--list", action="store_true")
+    x.add_argument("--json", action="store_true")
+
+    # Fill in per-option help from helptext (kept there so the parser stays compact).
+    for name, sub in sp.choices.items():
+        args = helptext.COMMANDS.get(name, {}).get("args", {})
+        for act in sub._actions:
+            if act.dest in args and not act.help:
+                act.help = helptext.fill(args[act.dest], names).replace("%", "%%")
     return ap
 
 
@@ -754,7 +802,7 @@ COMMANDS = {
     "init": cmd_init, "show": cmd_show, "set": cmd_set, "catalog": cmd_catalog, "morphs": cmd_morphs,
     "skin": cmd_skin, "face": cmd_face, "eyes": cmd_eyes, "brows": cmd_brows, "hair": cmd_hair, "garment": cmd_garment, "template": cmd_template, "build": cmd_build,
     "render": cmd_render, "animations": cmd_animations, "reference-body": cmd_reference_body,
-    "autorig": cmd_autorig, "validate": cmd_validate, "schema": cmd_schema,
+    "autorig": cmd_autorig, "validate": cmd_validate, "schema": cmd_schema, "guide": cmd_guide,
 }
 
 
@@ -770,7 +818,7 @@ def main(argv=None):
         if e.code == 0:
             return 0
         return emit({"ok": False, "error": {"code": "bad_arguments", "message": "Invalid command line",
-                                            "hint": "Run `kankuro schema` or `kankuro <command> --help`"}}, 2)
+                                            "hint": "Run `kankuro --help`, `kankuro <command> --help` or `kankuro guide`"}}, 2)
     try:
         if a.cmd == "hair" and a.action == "set" and not a.style and not a.color:
             raise CliError("missing_arg", "hair set needs a style", hint=f"Valid: {', '.join(catalog.HAIR_STYLES)}")
@@ -778,6 +826,9 @@ def main(argv=None):
             raise CliError("missing_arg", "garment add needs a type", hint=f"Valid: {', '.join(catalog.GARMENTS)}")
         if a.cmd == "garment" and a.action in ("set", "remove") and not (a.type or a.id):
             raise CliError("missing_arg", f"garment {a.action} needs a garment id")
+        if a.cmd == "guide" and not (a.json or a.list):  # plain text for reading, not JSON
+            sys.stdout.write(_guide_text(a.topic))
+            return 0
         res = COMMANDS[a.cmd](a)
         return emit({"ok": True, "command": a.cmd, **res})
     except CliError as e:

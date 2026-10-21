@@ -17,7 +17,7 @@ kankuro [-p PROJECT] [--version] <command> [options]
 * Hair and clothes: [hair](#hair) · [garment](#garment) · [template](#template)
 * Output: [render](#render) · [build](#build) · [animations](#animations)
 * Assets and rigging: [reference-body](#reference-body) · [autorig](#autorig) · [validate](#validate)
-* [schema](#schema)
+* Help: [schema](#schema) · [guide](#guide) · [--help](#built-in-help)
 * [Error codes](#error-codes)
 
 ---
@@ -771,6 +771,34 @@ kankuro schema
 
 A machine-readable summary of every command, the spec file name and the conventions. It's the
 quickest thing for an agent to read first.
+
+## guide
+
+```
+kankuro guide [TOPIC] [--list] [--json]
+```
+
+Prints a guide as **plain Markdown text** (not JSON), so an agent can learn kankuro from the
+terminal alone. The guides are these docs, shipped inside the package.
+
+| topic | prints |
+|---|---|
+| `agents` (default) | [agents.md](agents.md): the JSON contract, a working loop, a system prompt snippet |
+| `start` | [getting-started.md](getting-started.md) |
+| `cli` | this reference |
+| `spec` | [character-spec.md](character-spec.md) |
+| `textures` | [codex-textures.md](codex-textures.md) |
+| `install` | [installation.md](installation.md) |
+
+`--list` prints the topics as JSON; `--json` wraps the text as `{"ok": true, "topic", "text"}`.
+Unknown topics fail with `unknown_topic`.
+
+## Built-in help
+
+`kankuro --help` lists every command with a one-line summary, the JSON contract and a quick start.
+`kankuro <command> --help` explains every option and ends with worked examples and the valid names
+(presets, styles, garment types, fabrics, colours) read live from the catalogs. Help output is plain
+text, like `guide`.
 
 ---
 

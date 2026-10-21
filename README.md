@@ -246,6 +246,10 @@ shapes, so they look plain in close-ups.
 
 ## Commands
 
+Agents can learn the whole CLI from the terminal: `kankuro --help`, `kankuro <command> --help`
+(options and worked examples), and `kankuro guide` (the agent guide; `kankuro guide --list` for the
+full reference, spec format and texture guide).
+
 Run `kankuro schema` for the machine-readable list. In brief:
 
 | command | purpose |
@@ -268,6 +272,8 @@ Run `kankuro schema` for the machine-readable list. In brief:
 | `reference-body --out` | neutral body for authoring assets |
 | `autorig <mesh> --out` | rig any humanoid |
 | `validate <glb>` | check against the Mesh2Motion standard |
+| `guide [topic]` | print the agent guide or a reference doc as plain text |
+| `schema` | all commands as JSON |
 
 Exit codes: `0` ok, `2` bad input (`error.code` + `error.hint`), `1` internal error (with a traceback;
 Blender's own log is in `build/blender.log`).

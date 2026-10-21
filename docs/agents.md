@@ -14,15 +14,17 @@ at the bottom straight into an agent's instructions.
   **Exit code 1** is a kankuro bug: `error.traceback` and `<project>/build/blender.log` explain it.
 * **State lives in `character.json`.** Commands are idempotent edits of it. `kankuro show` prints it.
   Nothing is hidden in a cache or a session.
-* **Discover, don't guess.** `kankuro schema` (all commands), `kankuro catalog` (presets, sliders,
-  hair, garments, fabrics), `kankuro morphs --search <text>`, `kankuro animations`.
+* **Discover, don't guess.** `kankuro --help` and `kankuro <command> --help` (options plus worked
+  examples), `kankuro guide` (this guide; `kankuro guide --list` for the CLI reference, spec format
+  and texture guide), `kankuro schema` (all commands as JSON), `kankuro catalog` (presets, sliders,
+  hair, garments, fabrics, colours), `kankuro morphs --search <text>`, `kankuro animations`.
 * **Look at your work.** `kankuro render` writes PNGs. An agent that can read images should open
   `renders/render_sheet.png` after visible changes.
 
 ## A good loop
 
 ```text
-1. kankuro schema; kankuro catalog                 # learn what exists
+1. kankuro guide; kankuro catalog                  # learn the contract and what exists
 2. kankuro init <dir> --preset <closest preset>
 3. kankuro set ... / face ... / skin / eyes / brows / hair set ... / garment add ...  # rough pass from the brief
 4. kankuro render                                   # look at render_sheet.png
@@ -89,7 +91,8 @@ independent processes, so separate projects can be built in parallel.
 ```text
 You can build rigged 3D characters with the `kankuro` CLI.
 - Every command prints one JSON object. Check "ok"; on failure read error.code and error.hint and fix the input.
-- Start with `kankuro schema` and `kankuro catalog`. Never guess names; use `catalog`, `morphs --search`, `animations`.
+- Start with `kankuro guide` and `kankuro catalog`; `kankuro <command> --help` shows options and examples.
+  Never guess names; use `catalog`, `morphs --search`, `face list`, `animations`.
 - A project is a folder with character.json. Create it with `kankuro init <dir> --preset <preset>`.
   Put -p <dir> BEFORE the command, or cd into the folder.
 - Shape with `kankuro set body.macros.<slider>=<0..1>` and `body.height_cm=<cm>`; quote morph names: "body.morphs.<name>=<v>".

@@ -40,6 +40,11 @@ House rules:
 * Modules under `kankuro/blender/` may import `bpy`; everything else must not, so spec commands
   stay instant.
 * New garments and hair styles go in `catalog.py`.
+* A new command or option needs its help in `kankuro/helptext.py` (summary, description, examples,
+  per-option help); `tests/test_guides.py` checks every command has examples.
+* After editing a doc that `kankuro guide` prints (agents, getting-started, cli-reference,
+  character-spec, codex-textures, installation), run `python tools/sync_guides.py` to copy it into
+  `kankuro/guides/`; the tests fail if the copies drift.
 
 ## CI
 

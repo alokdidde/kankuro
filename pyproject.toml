@@ -34,4 +34,4 @@ kankuro = "kankuro.cli:main"
 include = ["kankuro*"]
 
 [tool.setuptools.package-data]
-kankuro = ["data/*", "data/*/*"]
+kankuro = ["data/*", "data/*/*", "guides/*.md"]
