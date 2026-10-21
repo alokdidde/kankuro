@@ -1,5 +1,11 @@
-<!-- Logo goes here once generated: docs/images/logo.png -->
-# kankuro
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/logo-dark.png">
+    <img src="docs/images/logo.png" alt="kankuro logo: a marionette control bar holding a rigged mannequin" width="160">
+  </picture>
+</p>
+
+<h1 align="center">kankuro</h1>
 
 **A character creator CLI for AI agents.** Rigged, game-ready 3D humans from a small JSON spec,
 in the spirit of Reallusion Character Creator, built on Blender and the Mesh2Motion skeleton.
