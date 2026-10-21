@@ -12,8 +12,15 @@ LIBRARIES = {"human-base": os.path.join(DATA, "animations", "human-base-animatio
 _CACHE = {}
 
 
+def _cached(path):
+    try:
+        return path in _CACHE and all(a.name in bpy.data.actions for a in _CACHE[path])
+    except ReferenceError:  # the scene was reset since
+        return False
+
+
 def _import_library(path):
-    if path in _CACHE and all(a.name in bpy.data.actions for a in _CACHE[path]):
+    if _cached(path):
         return _CACHE[path]
     before_objs = set(bpy.data.objects)
     before_actions = set(bpy.data.actions)

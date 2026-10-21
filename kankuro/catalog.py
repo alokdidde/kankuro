@@ -181,3 +181,68 @@ GARMENTS = {
         "slot": "shawl", "layer": 4, "offset": 0.004, "drape": "dupatta", "width": 0.22, "drop": 0.15, "end": 0.45,
     },
 }
+
+
+def m2m_bones():
+    """The 66 Mesh2Motion bone names (with root), in file order. bpy-free."""
+    import json
+    import os
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "m2m_rig.json")
+    with open(path) as f:
+        return [b["name"] for b in json.load(f)["bones"]]
+
+
+# Accessories: rigid pieces on one bone (blender/accessories.py). Built-ins are made on the reference body
+# so agents can try the command without a mesh; your own are modelled on `kankuro reference-body`.
+#   fit: none (rigid; slides along the bone until clear of the body) | wrap (radial scale to hug a limb) |
+#        chest / neck (the lower part settles onto the chest) | pierce (rigid and left exactly where it is,
+#        through the body: earrings, nose rings); hang: extra bones for a dangling part
+ACCESSORIES = {
+    "circlet": {"desc": "Plain gold band around the head at the forehead, with a small front ornament",
+                "bone": "head", "fit": "none", "material": "gold"},
+    "ring_earring_l": {"desc": "Small hoop earring through the left earlobe", "bone": "head", "fit": "pierce",
+                       "hang": 1, "material": "gold"},
+    "ring_earring_r": {"desc": "Small hoop earring through the right earlobe", "bone": "head", "fit": "pierce",
+                       "hang": 1, "material": "gold"},
+    "bangle_l": {"desc": "Bangle on the left wrist", "bone": "lowerarm_l", "fit": "wrap", "material": "gold"},
+    "bangle_r": {"desc": "Bangle on the right wrist", "bone": "lowerarm_r", "fit": "wrap", "material": "gold"},
+}
+ACCESSORY_FITS = ("none", "wrap", "chest", "neck", "pierce")
+
+# Props: held in the hand through a socket bone (prop_l / prop_r under hand_l / hand_r). Built-in test props
+# are cylinders laid across the palm: radius/length in metres, `along` = how far the prop runs past the
+# grip towards the index finger (the rest runs towards the little finger), `tilt` = degrees the index end
+# leans towards the fingertips (negative: towards the wrist, so a long staff points down a hanging arm),
+# `reach` = where the second hand holds a two-hand prop, metres from the grip towards the index finger
+# (negative: towards the little finger; default -0.3);
+# `hold` = where the anchor hand's wrist brings a two-hand prop, metres from `hold_bone`'s head (x is
+# mirrored for a left anchor). Default: in front of the chest, from spine_03.
+PROPS = {
+    "handle": {"desc": "Plain cylinder handle, 3 cm across (a tool grip, a bucket handle)", "radius": 0.015,
+               "length": 0.14, "along": 0.5, "tilt": 15, "grip": "power", "hand": "r", "material": "iron_dark"},
+    "staff": {"desc": "Walking staff (lathi), 4 cm across and 1.3 m long", "radius": 0.02, "length": 1.3, "along": 0.37, "tilt": -40,
+              "grip": "staff", "hand": "r", "color": "#6b4a2b"},
+    "flute": {"desc": "Bansuri flute, 2.5 cm across and 0.55 m long, held in both hands", "radius": 0.0125,
+              "length": 0.55, "along": 0.35, "tilt": 0, "grip": "flute", "hand": "both", "anchor": "r", "reach": -0.12,
+              "hold_bone": "head", "hold": [-0.22, -0.2, -0.12],
+              "color": "#b98c4f"},
+}
+
+# Grips: finger poses for holding props. "contact" curls each finger joint until it touches the prop
+# (limited to `max` degrees per joint: knuckle, middle, tip); a list of degrees is a fixed pose.
+GRIPS = {
+    "power": {"desc": "Full wrap round a handle, thumb over the fingers", "fingers": "contact", "thumb": "contact",
+              "max": [90, 100, 80]},
+    "staff": {"desc": "Like power, for a long pole", "fingers": "contact", "thumb": "contact", "max": [90, 100, 80]},
+    "hook": {"desc": "Fingers hooked round a handle, thumb free (carrying a bucket or a bag)",
+             "fingers": "contact", "thumb": [10, 5, 0], "max": [25, 100, 80]},
+    "pinch": {"desc": "Thumb and index pinch, other fingers loosely curled", "fingers": "contact",
+              "thumb": "contact", "max": [70, 80, 60], "only": ["index"], "rest": [30, 45, 30]},
+    "flute": {"desc": "Fingers laid over a flute's holes, thumb under it", "fingers": "contact", "thumb": "contact",
+              "max": [30, 35, 25]},
+    "open": {"desc": "Flat, relaxed open hand", "fingers": [5, 5, 5], "thumb": [0, 0, 0]},
+    "fist": {"desc": "Closed fist", "fingers": [80, 95, 70], "thumb": [30, 40, 40]},
+    "point": {"desc": "Index finger pointing, the rest in a fist", "fingers": [80, 95, 70], "thumb": [30, 40, 40],
+              "index": [0, 0, 0]},
+}
+FINGERS = ("index", "middle", "ring", "pinky")

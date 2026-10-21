@@ -15,6 +15,7 @@ kankuro [-p PROJECT] [--version] <command> [options]
 * Project and spec: [init](#init) · [show](#show) · [set](#set) · [catalog](#catalog) · [morphs](#morphs) · [skin](#skin)
 * Face and look: [face](#face) · [eyes](#eyes) · [brows](#brows) · [Colour names](#colour-names)
 * Hair and clothes: [hair](#hair) · [garment](#garment) · [template](#template)
+* Attachments: [accessory](#accessory) · [prop](#prop) · [grip](#grip) · [bones](#bones)
 * Output: [render](#render) · [build](#build) · [animations](#animations)
 * Assets and rigging: [reference-body](#reference-body) · [autorig](#autorig) · [validate](#validate)
 * Help: [schema](#schema) · [guide](#guide) · [--help](#built-in-help)
@@ -668,6 +669,164 @@ Imported (custom) garments keep their own UVs and fail with `custom_garment`.
 The full retexturing workflow, with ready-made image-model prompts, is in
 [codex-textures.md](codex-textures.md).
 
+## Attachments
+
+Things that ride on the skeleton without being cloth: rigid jewellery and armour pieces
+([accessory](#accessory)), objects in the hand ([prop](#prop)), and extra bone chains for tails,
+braids and dangling ornaments ([bones](#bones)). None of them changes the 65 Mesh2Motion bones
+(66 with `root`): extra bones always hang under a standard bone, so every clip still plays and
+`validate` lists them under `extra_bones`.
+
+Their placement is modelled on the neutral body (`kankuro reference-body`) and carried onto each
+character with a best-fit similarity transform of the body around the bone, so one mesh fits every
+body shape. Offsets are in metres on the reference body: x is the character's left, y is back, z is up.
+
+![Gold circlet, ring earrings and bangles, a staff in the hand, and a tail](images/attach/attachments.jpg)
+
+### accessory
+
+A rigid mesh that follows one bone: a crown, earrings, a necklace, armlets, bangles, a belt buckle.
+
+```
+kankuro accessory add|set ID [--file MESH | --builtin NAME] [--bone BONE] [--fit FIT] [--hang N]
+                      [--offset X,Y,Z] [--rotate X,Y,Z] [--scale S]
+                      [--material PRESET] [--color C] [--roughness R] [--layer N] [--hide-hair true|false]
+kankuro accessory remove ID
+kankuro accessory list
+```
+
+| option | meaning |
+|---|---|
+| `ID` | the accessory's id, also its mesh name in the GLB. `add <built-in name>` with no `--file` uses that built-in |
+| `--file` | a mesh (`.glb`, `.gltf`, `.obj`, `.fbx`) modelled on the reference body |
+| `--bone` | the Mesh2Motion bone it follows (`head`, `neck_01`, `spine_03`, `upperarm_l`, `lowerarm_r`, ...) |
+| `--fit` | `none` (default): rigid; if it cuts into the body it slides along the bone until clear, so a crown rides up a bigger head. `wrap`: scaled radially to hug a limb (armlets, bangles). `chest` / `neck`: the lower part settles onto the chest (or the clothes on it), the clasp stays put. `pierce`: rigid, no adjustment (earrings go through the lobe) |
+| `--hang` | adds N bones under it for a dangling part (earring drops, necklace pendants); the part below the attach point is weighted down the chain and swings on clips |
+| `--offset`, `--rotate`, `--scale` | placement adjustment: metres, degrees about its centre, uniform scale |
+| `--material`, `--color`, `--roughness` | a [material preset](#materials); an imported mesh keeps its own materials when none is given |
+| `--layer` | stacking order against garments (default 10, over every garment) |
+| `--hide-hair` | a band round the head presses the hair under it inward (default `true` on the `head` bone) |
+
+Built-ins: `circlet` (gold head band), `ring_earring_l` / `ring_earring_r` (gold hoops through the
+lobes, with one hang bone each), `bangle_l` / `bangle_r` (gold bangles on the forearms).
+
+```bash
+kankuro accessory add circlet
+kankuro accessory add crown --file crown.glb --bone head --material gold
+kankuro accessory add haar --file necklace.glb --bone spine_03 --hang 3 --fit chest --material gold
+kankuro accessory add bajuband_l --file armlet.glb --bone upperarm_l --fit wrap
+kankuro accessory set crown --offset 0,0,0.01 --rotate 0,0,5 --scale 1.05
+```
+
+Prints `{"accessory": {...}, "accessories": [...]}`; `list` adds the built-ins and fits.
+
+### prop
+
+An object held in the hand. It hangs from a socket bone (`prop_l` or `prop_r`, under `hand_l` /
+`hand_r`, with its Z axis along the palm normal), so engines can also attach other objects there.
+
+```
+kankuro prop add|set ID [--file MESH | --builtin NAME] [--hand l|r|both] [--anchor l|r]
+                  [--grip GRIP] [--grip-weight W] [--reach M]
+                  [--offset X,Y,Z] [--rotate X,Y,Z] [--scale S] [--material PRESET] [--color C] [--roughness R]
+kankuro prop remove ID
+kankuro prop list
+```
+
+| option | meaning |
+|---|---|
+| `--file` | a mesh modelled on the reference body, placed in the T-posed hand where it is held |
+| `--hand` | `r` (default), `l`, or `both` |
+| `--anchor` | with `both`: the hand that holds the prop (default `r`); the other hand reaches for it |
+| `--grip` | the finger pose ([grip](#grip)); default `power` |
+| `--grip-weight` | 0..1: how much the grip replaces the clip's own finger animation (default 1) |
+| `--reach` | with `both`: where the other hand holds, in metres along the prop from the grip towards the index finger (negative: towards the little finger) |
+| `--offset`, `--rotate`, `--scale` | placement in the hand, about the grip point |
+
+The grip is baked over the finger channels of every clip (`build` and `render --animation`). A
+**contact** grip curls each finger joint, knuckle first, until it touches the prop, so it fits any
+prop thickness. With `--hand both` the anchor hand is placed on the prop's hold point and the other
+arm follows it with IK; a clip where a hand can't reach within 1 cm is named in the output's
+`warnings`. `render --animation` also warns when the prop passes through the body
+(`penetration`).
+
+Built-ins: `handle` (a plain 3 cm cylinder: a tool grip or bucket handle), `staff`
+(a 1.3 m walking staff, a lathi), `flute` (a bansuri held to the mouth with both hands).
+
+![The staff on Idle, and the flute held to the mouth with both hands](images/attach/props.jpg)
+
+```bash
+kankuro prop add staff
+kankuro prop add bow --file bow.glb --hand l --grip power
+kankuro prop add flute --hand both --anchor r --grip flute
+kankuro prop set bow --offset 0,0.02,0 --rotate 0,90,0
+kankuro render --animation Walk --frame 0.3 --views front,side
+```
+
+Prints `{"prop": {...}, "props": [...]}`; `list` adds the built-ins and grips.
+
+### grip
+
+List the finger poses props use.
+
+```
+kankuro grip list
+```
+
+| grip | kind | for |
+|---|---|---|
+| `power` | contact | a full wrap round a handle, thumb over the fingers |
+| `staff` | contact | like `power`, for a long pole |
+| `hook` | contact | fingers hooked round a handle, thumb free (a bucket, a bag) |
+| `pinch` | contact | thumb and index pinch, other fingers loosely curled |
+| `flute` | contact | fingers laid lightly over a flute's holes, thumb under it |
+| `open`, `fist`, `point` | fixed | not for holding: a relaxed open hand, a closed fist, the index finger pointing |
+
+Prints `{"grips": {"<name>": {...}}}`.
+
+### bones
+
+Extra bone chains: tails, braids, ponytails, dangling ornaments. Each chain hangs from a standard
+bone; its bones are named `<id>_01`, `<id>_02`, ... from the root.
+
+```
+kankuro bones add|set ID [--parent BONE] [--count N] [--length M] [--taper T] [--curve up:F|down:F]
+                      [--radius R] [--color C] [--material PRESET] [--follow hair|none]
+                      [--stiffness K] [--damping D] [--gravity G] [--no-motion]
+kankuro bones remove ID
+kankuro bones list
+```
+
+| option | default | meaning |
+|---|---|---|
+| `--parent` | | the standard bone it hangs from (`pelvis` for a tail, `head` for a braid) |
+| `--count` | 6 | number of bones, 1..32 |
+| `--length` | 0.6 | total length in metres |
+| `--taper` | 0.5 | 0..1: how much shorter and thinner the bones get towards the tip |
+| `--curve` | | `up:F` or `down:F`: how far the chain bends along its length (1 = half a turn) |
+| `--radius` | 0 | gives the chain a tapered tube mesh of this radius (a tail); 0 = bones only |
+| `--color`, `--material` | hair colour | the tube's look |
+| `--follow hair` | | rebinds the hanging hair (a braid or ponytail) to the chain |
+| `--stiffness`, `--damping`, `--gravity` | 0.35, 0.25, 1.0 | the follow-through spring |
+| `--no-motion` | | keep the chain rigid in clips |
+
+`build` and `render --animation` bake **follow-through** into every clip: each chain is a damped
+spring that lags behind the body, sags with gravity and is kept out of the legs. A looping clip is
+run twice and its end blended into its start, so the result loops cleanly; the bake is
+deterministic. `--secondary-motion all|none|ID,ID` on `build` and `render` picks which chains get
+it (default all). Accessories with `--hang` use the same spring with stiffer settings.
+
+![A tail swinging through the Walk clip](images/attach/tail_walk.jpg)
+
+```bash
+kankuro bones add tail --parent pelvis --count 8 --length 0.9 --curve up:0.3 --taper 0.5 --radius 0.035
+kankuro bones add braid --parent head --count 5 --follow hair
+kankuro build --animations Idle_A,Walk --secondary-motion tail,braid
+```
+
+Prints `{"chain": {...}, "bones": ["tail_01", ...], "extra_bones": [...]}`. `list` also names the
+prop sockets and accessory hang bones the spec adds.
+
 ---
 
 ## Output
@@ -683,6 +842,7 @@ Preview PNGs, rendered with Cycles on the CPU. Use them to check the result visu
 kankuro render [--views V1,V2,...] [--focus full|upper|head]
                [--animation CLIP --frame F] [--expression EXPR]
                [--size PX] [--samples N] [--out DIR] [--prefix NAME]
+               [--secondary-motion all|none|IDS]
 ```
 
 | option | default | meaning |
@@ -696,6 +856,7 @@ kankuro render [--views V1,V2,...] [--focus full|upper|head]
 | `--samples` | 12 | Cycles samples; raise for cleaner images, lower for speed |
 | `--out` | `<project>/renders` | output folder |
 | `--prefix` | `render` (or `pose_<clip>`) | file name prefix |
+| `--secondary-motion` | `all` | with `--animation`: which [extra bone chains](#bones) get follow-through |
 
 Writes one PNG per view plus a combined `<prefix>_sheet.png`.
 
@@ -706,7 +867,9 @@ kankuro render --animation Jog --frame 0.3      # check how clothes deform mid-s
 kankuro render --focus head --expression surprise
 ```
 
-Prints `{"views": {"front": "<png>", ...}, "sheet": "<png>", "animation", "frame", "focus", "expression"?}`.
+Prints `{"views": {"front": "<png>", ...}, "sheet": "<png>", "animation", "frame", "focus", "expression"?, "warnings"?}`.
+With a [prop](#prop) in the hand, `warnings` names a pose where it passes through the body or a hand
+can't reach it.
 
 ### build
 
@@ -714,6 +877,7 @@ Build the character and export a rigged GLB.
 
 ```
 kankuro build [--out GLB] [--animations A,B,...|all] [--render] [--size PX] [--samples N]
+              [--secondary-motion all|none|IDS]
 ```
 
 | option | default | meaning |
@@ -722,10 +886,13 @@ kankuro build [--out GLB] [--animations A,B,...|all] [--render] [--size PX] [--s
 | `--animations` | the spec's `export.animations` | Mesh2Motion clips to bake in, comma-separated, or `all` (87 clips, a much bigger file) |
 | `--render` | | also render preview views (`renders/build_*.png`) |
 | `--size`, `--samples` | 512, 12 | for `--render` |
+| `--secondary-motion` | `all` | which [extra bone chains](#bones) get follow-through baked into the clips: `all`, `none`, or chain ids |
 
 The GLB has the body, eyes, hair, eyebrows and each garment as separate skinned meshes, one armature, PBR
 materials (garments get baked `baseColorTexture` and `normalTexture`), the requested clips, and
-the 52 ARKit facial blendshapes as morph targets on the body.
+the 52 ARKit facial blendshapes as morph targets on the body. [Accessories](#accessory),
+[props](#prop) and chain tubes are separate meshes named by their ids; their bones (prop sockets,
+chains, hang bones) are listed in the manifest's `skeleton.extra_bones`.
 
 #### Facial expressions
 
@@ -795,7 +962,8 @@ Rig any humanoid mesh to the Mesh2Motion skeleton. It doesn't need a project.
 
 ```
 kankuro autorig <mesh> --out GLB [--facing auto|-y|+y|-x|+x] [--animations A,B] [--render DIR]
-                [--method auto|heat|proximity]
+                [--method auto|heat|proximity] [--prop NAME[:HAND[:GRIP]] ...]
+                [--extra-chain ID:PART[:COUNT] ...]
 ```
 
 | option | default | meaning |
@@ -805,6 +973,8 @@ kankuro autorig <mesh> --out GLB [--facing auto|-y|+y|-x|+x] [--animations A,B] 
 | `--facing` | `auto` | which way the model faces (`-y`, `+y`, `-x`, `+x`); `auto` detects it from the feet |
 | `--animations` | | clips to bake in |
 | `--render` | | folder for check renders (front and side, at rest and posed) |
+| `--prop` | | put a [prop](#prop) in the hand: a built-in name or a mesh file (placed as on the reference body), optionally with the hand (`l`, `r`, `both`) and grip; repeatable |
+| `--extra-chain` | | an [extra bone chain](#bones) through a part of the file (a mesh object or vertex group name, e.g. a tail), with `COUNT` bones (default 6); the part is weighted to the chain and gets follow-through on the clips; repeatable |
 | `--method` | `auto` | skinning: `heat` (bone heat on the mesh), `proximity` (distance weights), `auto` tries heat, then heat on a welded copy and on voxel remeshes (fine to coarse) with weights copied back, then distance |
 
 What works: upright humanoids in T- or A-pose, dressed or not, realistic or cartoon proportions.
@@ -819,14 +989,21 @@ the output as `autorig.log`.
 
 ```bash
 kankuro autorig robot.glb --out robot_rigged.glb --animations Idle_A,Walk --render ./check
+kankuro autorig vanara.glb --out vanara.glb --extra-chain tail:Tail:8 --animations Walk
+kankuro autorig farmer.glb --out farmer.glb --prop staff --prop ./hoe.glb:l:power --animations Idle_A
 ```
+
+The chain's root hangs from the standard bone nearest the part's attached end. The output adds
+`extra_bones` and `warnings` (for example a two-hand prop a clip can't reach).
 
 ### validate
 
 Check a GLB against the Mesh2Motion human standard: bone names and hierarchy, rest orientations,
 T-pose, skin weights. Files that carry facial blendshapes are also checked for all 52 ARKit shapes
 (`arkit_blendshapes`, listing any `missing`) and for every morph weight resting at 0
-(`blendshapes_at_rest`; otherwise engines would show an expression by default).
+(`blendshapes_at_rest`; otherwise engines would show an expression by default). Bones beyond the
+standard ones pass only when each hangs under a standard bone; they are listed by parent in
+`extra_bones`.
 
 ```
 kankuro validate <glb>

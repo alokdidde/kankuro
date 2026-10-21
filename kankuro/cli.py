@@ -261,6 +261,211 @@ def _garment_material(p, g, a):
         g.pop("material_regions", None)
 
 
+def _vec3(x, name):
+    try:
+        v = [float(t) for t in x.split(",")]
+    except ValueError:
+        v = []
+    if len(v) != 3:
+        raise CliError("bad_value", f"--{name} expects three numbers x,y,z", hint=f"e.g. --{name} 0,0,0.02")
+    return v
+
+
+def _find(items, iid, kind, code):
+    for x in items:
+        if x["id"] == iid:
+            return x
+    raise CliError(code, f"No {kind} with id '{iid}'",
+                   hint="Current ids: " + (", ".join(x["id"] for x in items) or "(none)"))
+
+
+def _placement(p, x, a, builtins, kind):
+    """Shared accessory/prop options: --file/--builtin, --offset/--rotate/--scale, --material/--color."""
+    if getattr(a, "file", None):
+        x["file"] = specmod.import_file(p, a.file, "meshes")
+        x.pop("builtin", None)
+    if getattr(a, "builtin", None):
+        if a.builtin not in builtins:
+            raise CliError(f"unknown_{kind}", f"Unknown built-in {kind} '{a.builtin}'", hint="Valid: " + ", ".join(builtins))
+        x["builtin"] = a.builtin
+        x.pop("file", None)
+    if a.offset is not None:
+        x["offset"] = _vec3(a.offset, "offset")
+    if a.rotate is not None:
+        x["rotate"] = _vec3(a.rotate, "rotate")
+    if a.scale is not None:
+        x["scale"] = a.scale
+    if a.material is not None:
+        from . import matlib
+        if a.material == "none":
+            x.pop("material", None)
+        else:
+            matlib.check(a.material)
+            x["material"] = a.material
+    if a.color is not None:
+        x["color"] = specmod.color(a.color, "color") if a.color else None
+    if a.roughness is not None:
+        x["roughness"] = a.roughness
+
+
+def cmd_accessory(a):
+    p = _project(a)
+    s = specmod.load(p)
+    items = s.setdefault("accessories", [])
+    if a.action == "list":
+        return {"accessories": items, "builtins": {k: v["desc"] for k, v in catalog.ACCESSORIES.items()},
+                "fits": list(catalog.ACCESSORY_FITS)}
+    if not a.id:
+        raise CliError("missing_arg", f"accessory {a.action} needs an id")
+    if a.action == "remove":
+        x = _find(items, a.id, "accessory", "no_accessory")
+        items.remove(x)
+        specmod.save(p, s)
+        return {"removed": x["id"], "accessories": items}
+    if a.action == "add":
+        if any(x["id"] == a.id for x in items):
+            raise CliError("duplicate_id", f"Accessory id '{a.id}' already exists", hint="Use `accessory set` to change it")
+        x = {"id": a.id}
+        if not a.file and not a.builtin:
+            if a.id not in catalog.ACCESSORIES:
+                raise CliError("missing_arg", "accessory add needs --file <mesh> or --builtin <name>",
+                               hint="Built-ins: " + ", ".join(catalog.ACCESSORIES))
+            a.builtin = a.id
+        if a.builtin and a.builtin in catalog.ACCESSORIES:
+            d = catalog.ACCESSORIES[a.builtin]
+            x.update({k: d[k] for k in ("bone", "fit", "hang", "material") if k in d})
+        items.append(x)
+    else:
+        x = _find(items, a.id, "accessory", "no_accessory")
+    _placement(p, x, a, catalog.ACCESSORIES, "accessory")
+    if a.bone is not None:
+        x["bone"] = specmod.check_bone(a.bone, "--bone")
+    if "bone" not in x:
+        raise CliError("missing_arg", "accessory add needs --bone <bone>",
+                       hint="Any Mesh2Motion bone, e.g. head, neck_01, spine_03, upperarm_l, lowerarm_r")
+    if a.fit is not None:
+        x["fit"] = a.fit
+    if a.hang is not None:
+        x["hang"] = a.hang
+    if a.layer is not None:
+        x["layer"] = a.layer
+    if a.hide_hair is not None:
+        x["hide_hair"] = a.hide_hair == "true"
+    specmod.validate(s, p)
+    specmod.save(p, s)
+    return {"accessory": x, "accessories": items}
+
+
+def cmd_prop(a):
+    p = _project(a)
+    s = specmod.load(p)
+    items = s.setdefault("props", [])
+    if a.action == "list":
+        return {"props": items, "builtins": {k: v["desc"] for k, v in catalog.PROPS.items()},
+                "grips": {k: v["desc"] for k, v in catalog.GRIPS.items()}}
+    if not a.id:
+        raise CliError("missing_arg", f"prop {a.action} needs an id")
+    if a.action == "remove":
+        x = _find(items, a.id, "prop", "no_prop")
+        items.remove(x)
+        specmod.save(p, s)
+        return {"removed": x["id"], "props": items}
+    if a.action == "add":
+        if any(x["id"] == a.id for x in items):
+            raise CliError("duplicate_id", f"Prop id '{a.id}' already exists", hint="Use `prop set` to change it")
+        x = {"id": a.id}
+        if not a.file and not a.builtin:
+            if a.id not in catalog.PROPS:
+                raise CliError("missing_arg", "prop add needs --file <mesh> or --builtin <name>",
+                               hint="Built-ins: " + ", ".join(catalog.PROPS))
+            a.builtin = a.id
+        if a.builtin and a.builtin in catalog.PROPS:
+            d = catalog.PROPS[a.builtin]
+            x.update({k: d[k] for k in ("hand", "grip", "anchor", "material", "color") if k in d})
+        x.setdefault("hand", "r")
+        x.setdefault("grip", "power")
+        items.append(x)
+    else:
+        x = _find(items, a.id, "prop", "no_prop")
+    _placement(p, x, a, catalog.PROPS, "prop")
+    if a.hand is not None:
+        x["hand"] = a.hand
+    if a.anchor is not None:
+        x["anchor"] = a.anchor
+    if a.grip is not None:
+        x["grip"] = a.grip
+    if a.grip_weight is not None:
+        x["grip_weight"] = max(0.0, min(1.0, a.grip_weight))
+    if a.reach is not None:
+        x["reach"] = a.reach
+    if x["hand"] == "both":
+        x.setdefault("anchor", "r")
+    specmod.validate(s, p)
+    specmod.save(p, s)
+    return {"prop": x, "props": items}
+
+
+def cmd_grip(a):
+    return {"grips": {k: {kk: vv for kk, vv in v.items()} for k, v in catalog.GRIPS.items()}}
+
+
+def cmd_bones(a):
+    p = _project(a)
+    s = specmod.load(p)
+    items = s.setdefault("extra_bones", [])
+    if a.action == "list":
+        out = []
+        for c in items:
+            out.append({**c, "bones": [f"{c['id']}_{k + 1:02d}" for k in range(c.get("count", 6))]})
+        sockets = sorted({f"prop_{pr['anchor'] if pr.get('hand') == 'both' else pr.get('hand')}" for pr in s.get("props") or []})
+        hangs = [f"{x['id']}_{k + 1:02d}" for x in s.get("accessories") or [] for k in range(x.get("hang", 0))]
+        return {"extra_bones": out, "prop_sockets": sockets, "accessory_hang_bones": hangs}
+    if not a.id:
+        raise CliError("missing_arg", f"bones {a.action} needs an id")
+    if a.action == "remove":
+        x = _find(items, a.id, "bone chain", "no_chain")
+        items.remove(x)
+        specmod.save(p, s)
+        return {"removed": x["id"], "extra_bones": items}
+    if a.action == "add":
+        if any(x["id"] == a.id for x in items):
+            raise CliError("duplicate_id", f"Chain id '{a.id}' already exists", hint="Remove it first, or pick another id")
+        if not a.parent:
+            raise CliError("missing_arg", "bones add needs --parent <bone>", hint="e.g. --parent pelvis (a tail), head (a braid)")
+        x = {"id": a.id, "parent": a.parent, "count": 6, "length": 0.6, "taper": 0.5, "secondary_motion": {}}
+        items.append(x)
+    else:
+        x = _find(items, a.id, "bone chain", "no_chain")
+    if a.parent is not None:
+        x["parent"] = a.parent
+    for k in ("count", "length", "taper", "radius"):
+        if getattr(a, k) is not None:
+            x[k] = getattr(a, k)
+    if a.curve is not None:
+        d, _, v = a.curve.partition(":")
+        if d not in ("up", "down") or not v:
+            raise CliError("bad_value", "--curve expects up:F or down:F", hint="e.g. --curve up:0.3")
+        x["curve"] = {d: float(v)}
+    if a.follow is not None:
+        x["follow"] = a.follow if a.follow != "none" else None
+        if x["follow"] is None:
+            x.pop("follow")
+    if a.color is not None:
+        x["color"] = specmod.color(a.color, "color")
+    if a.material is not None:
+        x["material"] = a.material
+    if a.no_motion:
+        x["secondary_motion"] = False
+    for k in ("stiffness", "damping", "gravity"):
+        if getattr(a, k) is not None:
+            if not isinstance(x.get("secondary_motion"), dict):
+                x["secondary_motion"] = {}
+            x["secondary_motion"][k] = getattr(a, k)
+    specmod.validate(s, p)
+    specmod.save(p, s)
+    return {"chain": x, "bones": [f"{x['id']}_{k + 1:02d}" for k in range(x.get("count", 6))], "extra_bones": items}
+
+
 # ---------------------------------------------------------------- Blender-backed commands
 
 def _bpy():
@@ -318,7 +523,7 @@ def cmd_build(a):
             paths, sheet = render.render_views([m for m in b.meshes], os.path.join(p, "renders"),
                                                size=a.size, samples=a.samples, prefix="build")
             renders = {"views": paths, "sheet": sheet}
-        clips = build.export_glb(b, out_path, anims)
+        clips = build.export_glb(b, out_path, anims, _secondary(a))
     manifest = {
         "glb": out_path, "bytes": os.path.getsize(out_path), "animations": clips,
         "seconds": round(time.time() - t0, 2), "timings": b.timings, **info,
@@ -328,6 +533,14 @@ def cmd_build(a):
         manifest["renders"] = renders
     json.dump(manifest, open(os.path.join(p, "build", "manifest.json"), "w"), indent=2)
     return manifest
+
+
+def _secondary(a):
+    """--secondary-motion all (default) | none | chain ids."""
+    v = getattr(a, "secondary_motion", None)
+    if not v or v == "all":
+        return None
+    return [] if v == "none" else _parse_list(v)
 
 
 def cmd_render(a):
@@ -358,13 +571,19 @@ def cmd_render(a):
             build.set_expression(b, expr)
         frame = None
         if a.animation:
-            frame = anim.pose_at(b.arm, a.animation, a.frame)
+            frame = build.pose_clip(b, a.animation, a.frame, _secondary(a))
+        if s.get("props"):
+            from .blender import props
+            if not a.animation:
+                props.pose_grips(b)
+            b.warnings += props.penetration(b)
         bbox = _focus_bbox(b, a.focus)
         prefix = a.prefix or ("pose_" + a.animation if a.animation else "render")
         paths, sheet = render.render_views(b.meshes, os.path.abspath(a.out or os.path.join(p, "renders")),
                                            views=views, size=a.size, samples=a.samples, prefix=prefix, bbox=bbox)
     return {"views": dict(zip(views, paths)), "sheet": sheet, "animation": a.animation, "frame": frame,
             "focus": a.focus or "full", **({"expression": expr} if expr else {}),
+            **({"warnings": b.warnings} if b.warnings else {}),
             "tip": "Open the sheet image to check the result visually"}
 
 
@@ -640,9 +859,41 @@ def cmd_autorig(a):
     out = os.path.abspath(a.out)
     os.makedirs(os.path.dirname(out), exist_ok=True)
     log = os.path.join(os.path.dirname(out), "autorig.log")
+    props = []
+    for k, item in enumerate(a.prop or []):
+        name, _, rest = item.partition(":")
+        hand, _, grip = rest.partition(":")
+        pr = {"id": f"prop{k + 1}" if name not in catalog.PROPS else name}
+        if name in catalog.PROPS:
+            d = catalog.PROPS[name]
+            pr.update(builtin=name, **{x: d[x] for x in ("hand", "grip", "anchor", "material", "color") if x in d})
+        elif os.path.isfile(name):
+            pr.update(file=os.path.abspath(name), hand="r", grip="power")
+        else:
+            raise CliError("unknown_prop", f"--prop {item}: not a built-in prop or a mesh file",
+                           hint="Built-ins: " + ", ".join(catalog.PROPS) + "; or a path to a .glb/.obj/.fbx")
+        if hand:
+            pr["hand"] = hand
+        if grip:
+            if grip not in catalog.GRIPS:
+                raise CliError("unknown_grip", f"Unknown grip '{grip}'", hint="Valid: " + ", ".join(catalog.GRIPS))
+            pr["grip"] = grip
+        if pr["hand"] == "both":
+            pr.setdefault("anchor", "r")
+        props.append(pr)
+    chains = []
+    for item in a.extra_chain or []:
+        cid, _, rest = item.partition(":")
+        part, _, n = rest.partition(":")
+        if not cid or not part:
+            raise CliError("bad_value", f"--extra-chain {item}: expected ID:PART[:COUNT]",
+                           hint="PART is a mesh object or vertex group in the file, e.g. tail:Tail:8")
+        specmod.check_id(cid, "--extra-chain")
+        chains.append((cid, part, int(n) if n else 6))
     with util.quiet(log):
         r = autorig.run(src, out, facing=a.facing, animations=_parse_list(a.animations),
-                        render_dir=os.path.abspath(a.render) if a.render else None, method=a.method)
+                        render_dir=os.path.abspath(a.render) if a.render else None, method=a.method,
+                        props=props, chains=chains)
     return r
 
 
@@ -714,12 +965,18 @@ SCHEMA = {
     "garment set <id> [--color HEX] [--texture PNG|''] [--fabric NAME|none] [--normal PNG] [--height PNG] [--normal-strength F] [--layer N] [--hide-body true|false]": "change a garment; texture = albedo, height/normal add 3D relief on the same UV template",
     "garment set <id> [--material PRESET|none] [--material-region NAME=PRESET[:#HEX]] [--mask PNG]": "metal/gem/zari materials for the whole garment or a region of its UV template (`catalog materials`)",
     "garment remove <id>": "remove a garment",
+    "accessory add|set <id> [--file MESH|--builtin NAME] [--bone BONE] [--fit none|wrap|chest|neck|pierce] [--hang N] [--offset X,Y,Z] [--rotate X,Y,Z] [--scale S] [--material PRESET]": "rigid jewellery/armour on one bone, carried onto every body shape",
+    "accessory remove <id> | accessory list": "remove or list accessories and the built-ins",
+    "prop add|set <id> [--file MESH|--builtin NAME] [--hand l|r|both] [--anchor l|r] [--grip GRIP] [--reach M] [--offset X,Y,Z] [--rotate X,Y,Z]": "an object in the hand on a prop_l/prop_r socket bone, with a grip pose baked over every clip",
+    "prop remove <id> | prop list | grip list": "remove or list props; list the grips",
+    "bones add|set <id> --parent BONE [--count N] [--length M] [--taper T] [--curve up:F|down:F] [--radius R] [--follow hair] [--stiffness K] [--damping D] [--gravity G] [--no-motion]": "extra bone chain (tail, braid) under a standard bone, with follow-through on clips",
+    "bones remove <id> | bones list": "remove or list extra bone chains",
     "template [targets...] [--out DIR] [--size PX]": "write UV template + mask PNGs (garment ids/types, 'body', or 'all')",
-    "build [--out GLB] [--animations A,B|all] [--render]": "build and export the rigged GLB",
-    "render [--views front,three_quarter,side,back] [--focus full|upper|head] [--animation CLIP --frame 0..1] [--expression smile|jawOpen=0.6,...]": "preview PNGs",
+    "build [--out GLB] [--animations A,B|all] [--render] [--secondary-motion all|none|IDS]": "build and export the rigged GLB",
+    "render [--views front,three_quarter,side,back] [--focus full|upper|head] [--animation CLIP --frame 0..1] [--expression smile|jawOpen=0.6,...] [--secondary-motion all|none|IDS]": "preview PNGs",
     "animations": "list Mesh2Motion clips that can be baked into the GLB",
     "reference-body --out GLB [--with-rig]": "neutral body for authoring custom garments/hair",
-    "autorig <mesh> --out GLB [--facing auto|-y|+y|-x|+x] [--animations A,B] [--render DIR]": "rig any humanoid mesh to the Mesh2Motion skeleton",
+    "autorig <mesh> --out GLB [--facing auto|-y|+y|-x|+x] [--animations A,B] [--render DIR] [--prop NAME[:HAND[:GRIP]]] [--extra-chain ID:PART[:COUNT]]": "rig any humanoid mesh to the Mesh2Motion skeleton",
     "validate <glb>": "check a GLB against the Mesh2Motion human standard",
     "schema": "this description",
     "guide [topic] [--list] [--json]": "print a usage guide as plain text (default: the agent guide)",
@@ -808,6 +1065,56 @@ def parser():
     x.add_argument("--mask", help="greyscale PNG on the garment UV template (white = in the region) for --material-region")
     x.add_argument("--keep-slot", action="store_true")
 
+    def _place(x):
+        x.add_argument("--file", help="mesh (.glb/.gltf/.obj/.fbx) modelled on `kankuro reference-body`")
+        x.add_argument("--builtin")
+        x.add_argument("--offset", metavar="X,Y,Z")
+        x.add_argument("--rotate", metavar="X,Y,Z")
+        x.add_argument("--scale", type=float)
+        x.add_argument("--material")
+        x.add_argument("--color")
+        x.add_argument("--roughness", type=float)
+
+    x = _sub("accessory")
+    x.add_argument("action", choices=["add", "set", "remove", "list"])
+    x.add_argument("id", nargs="?")
+    _place(x)
+    x.add_argument("--bone")
+    x.add_argument("--fit", choices=list(catalog.ACCESSORY_FITS))
+    x.add_argument("--hang", type=int)
+    x.add_argument("--layer", type=int)
+    x.add_argument("--hide-hair", choices=["true", "false"])
+
+    x = _sub("prop")
+    x.add_argument("action", choices=["add", "set", "remove", "list"])
+    x.add_argument("id", nargs="?")
+    _place(x)
+    x.add_argument("--hand", choices=["l", "r", "both"])
+    x.add_argument("--anchor", choices=["l", "r"])
+    x.add_argument("--grip", choices=list(catalog.GRIPS))
+    x.add_argument("--grip-weight", type=float)
+    x.add_argument("--reach", type=float)
+
+    x = _sub("grip")
+    x.add_argument("action", choices=["list"])
+
+    x = _sub("bones")
+    x.add_argument("action", choices=["add", "set", "remove", "list"])
+    x.add_argument("id", nargs="?")
+    x.add_argument("--parent")
+    x.add_argument("--count", type=int)
+    x.add_argument("--length", type=float)
+    x.add_argument("--taper", type=float)
+    x.add_argument("--curve", metavar="up:F|down:F")
+    x.add_argument("--radius", type=float)
+    x.add_argument("--color")
+    x.add_argument("--material")
+    x.add_argument("--follow", choices=["hair", "none"])
+    x.add_argument("--stiffness", type=float)
+    x.add_argument("--damping", type=float)
+    x.add_argument("--gravity", type=float)
+    x.add_argument("--no-motion", action="store_true")
+
     x = _sub("template")
     x.add_argument("targets", nargs="*")
     x.add_argument("--out")
@@ -819,6 +1126,8 @@ def parser():
     x.add_argument("--render", action="store_true")
     x.add_argument("--size", type=int, default=512)
     x.add_argument("--samples", type=int, default=12)
+    x.add_argument("--secondary-motion", metavar="all|none|IDS",
+                   help="extra bone chains to bake follow-through for (default all)")
 
     x = _sub("render")
     x.add_argument("--views")
@@ -830,6 +1139,7 @@ def parser():
     x.add_argument("--samples", type=int, default=12)
     x.add_argument("--out")
     x.add_argument("--prefix")
+    x.add_argument("--secondary-motion", metavar="all|none|IDS")
 
     _sub("animations")
     x = _sub("reference-body")
@@ -843,6 +1153,8 @@ def parser():
     x.add_argument("--animations")
     x.add_argument("--render")
     x.add_argument("--method", default="auto", choices=["auto", "heat", "proximity"])
+    x.add_argument("--prop", action="append", metavar="NAME[:HAND[:GRIP]]")
+    x.add_argument("--extra-chain", action="append", metavar="ID:PART[:COUNT]")
 
     x = _sub("validate")
     x.add_argument("glb")
@@ -866,6 +1178,7 @@ COMMANDS = {
     "skin": cmd_skin, "face": cmd_face, "eyes": cmd_eyes, "brows": cmd_brows, "hair": cmd_hair, "garment": cmd_garment, "template": cmd_template, "build": cmd_build,
     "render": cmd_render, "animations": cmd_animations, "reference-body": cmd_reference_body,
     "autorig": cmd_autorig, "validate": cmd_validate, "schema": cmd_schema, "guide": cmd_guide,
+    "accessory": cmd_accessory, "prop": cmd_prop, "grip": cmd_grip, "bones": cmd_bones,
 }
 
 

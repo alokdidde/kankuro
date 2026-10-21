@@ -10,7 +10,7 @@ from mathutils.bvhtree import BVHTree
 from .. import catalog, face, hairtex, morph, textures
 from .. import spec as specmod
 from ..errors import CliError
-from . import anim, body, garments, hair, hair_cards, materials, rig, util
+from . import accessories, anim, body, extras, garments, hair, hair_cards, materials, motion, rig, util
 
 
 class Built:
@@ -21,6 +21,11 @@ class Built:
         self.warnings = []
         self.timings = {}
         self.uv_info = {}
+        self.spec = {}
+        self.hair = None
+        self.chains = []  # extra bone chains with secondary motion (motion.py)
+        self.grips = []  # held props: finger poses, two-hand IK (motion.py)
+        self.capsules = {}
 
 
 def _tick(b, key, t0):
@@ -73,12 +78,14 @@ def conform_imported(obj, ref_coords, res, bone_filter=None, k=24):
     util.set_weight_matrix(obj, W, res.bones)
 
 
-def import_mesh_file(path, name, any_pose=False):
+def import_mesh_file(path, name, any_pose=False, keep_parts=False):
     """Import a .glb/.gltf/.obj/.fbx and join its meshes into one object (armatures are discarded).
 
     Skinned meshes keep their bind (rest) shape. With any_pose, a rest shape that is visibly broken
     (lying down, or parts scattered because the file only assembles them through the skin) is
-    replaced by the pose the file shows."""
+    replaced by the pose the file shows. With keep_parts, each vertex records the mesh object it came
+    from (int attribute "part", names in obj["parts"]) and its vertex groups (obj["groups"]: name ->
+    vertex indices), so a part can be picked out later (autorig --extra-chain)."""
     before = set(bpy.data.objects)
     ext = os.path.splitext(path)[1].lower()
     if ext in (".glb", ".gltf"):
@@ -101,7 +108,16 @@ def import_mesh_file(path, name, any_pose=False):
         raise CliError("no_mesh", f"No mesh found in {path}")
     if any_pose and any(o.type == "ARMATURE" for o in new):
         _bake_shown_pose(new, meshes)
-    for m in meshes:
+    parts, gnames = [], set()
+    for k, m in enumerate(meshes):
+        if keep_parts:
+            parts.append(m.name)
+            m.data.attributes.new("part", "INT", "POINT").data.foreach_set("value", [k] * len(m.data.vertices))
+            for vg in m.vertex_groups:
+                flag = [any(g.group == vg.index and g.weight > 0.5 for g in v.groups) for v in m.data.vertices]
+                if any(flag):
+                    m.data.attributes.new("g:" + vg.name, "BOOLEAN", "POINT").data.foreach_set("value", flag)
+                    gnames.add(vg.name)
         mw = m.matrix_world.copy()
         m.parent = None
         m.matrix_world = mw
@@ -117,6 +133,18 @@ def import_mesh_file(path, name, any_pose=False):
             bpy.ops.object.join()
     obj = meshes[0]
     obj.name = name
+    if keep_parts:
+        obj["parts"] = parts
+        groups = {}
+        for gn in gnames:
+            at = obj.data.attributes.get("g:" + gn)
+            if at is None:
+                continue
+            flag = np.zeros(len(obj.data.vertices), bool)
+            at.data.foreach_get("value", flag)
+            groups[gn] = np.nonzero(flag)[0].tolist()
+            obj.data.attributes.remove(at)
+        obj["groups"] = groups
     return obj
 
 
@@ -398,6 +426,7 @@ def _brow_shape(skin):
 def build_scene(spec, project, work_dir):
     """Build everything in the current Blender scene. Returns a Built."""
     b = Built()
+    b.spec = spec
     t = time.time()
     util.reset_scene()
     _REF.clear()
@@ -461,6 +490,7 @@ def build_scene(spec, project, work_dir):
             hobj.data.materials[0] = materials.make("HairBase", image_path=base_img, roughness=0.75)
             hobj.data.materials[1] = materials.make_hair("Hair", cards_img)
         b.meshes.append(hobj)
+        b.hair = hobj
         t = _tick(b, "hair", t)
     # skin
     skin = spec["skin"]
@@ -537,6 +567,13 @@ def build_scene(spec, project, work_dir):
     if to_shade:
         _garment_materials(to_shade, project, work_dir, spec, b)
         t = _tick(b, "garment_textures", t)
+    if spec.get("extra_bones") or spec.get("accessories") or spec.get("props"):
+        from . import props
+        extras.build_chains(b, spec)
+        accessories.build_all(b, spec, project)
+        props.build_all(b, spec, project)
+        b.capsules = motion.leg_capsules(b)
+        t = _tick(b, "extras", t)
     if "res" in _REF:
         bpy.data.objects.remove(_REF.pop("res").arm, do_unlink=True)
     if spec["export"].get("hide_body_under_clothes", True) and covers:
@@ -546,11 +583,15 @@ def build_scene(spec, project, work_dir):
     return b
 
 
-def export_glb(b, out_path, animations=()):
+def export_glb(b, out_path, animations=(), secondary=None):
+    """Export the GLB. secondary: extra chain ids to bake secondary motion for (None = all enabled)."""
     t = time.time()
     clips = []
     if animations:
         clips = anim.attach(b.arm, list(animations))
+        for tr in b.arm.animation_data.nla_tracks:
+            for st in tr.strips:
+                b.warnings += motion.prepare(b, st.action, secondary)
     bpy.context.view_layer.update()
     for o in bpy.data.objects:
         if o.name in bpy.context.view_layer.objects:
@@ -567,6 +608,17 @@ def export_glb(b, out_path, animations=()):
     bpy.ops.export_scene.gltf(**kwargs)
     b.timings["export"] = round(time.time() - t, 3)
     return clips
+
+
+def pose_clip(b, name, frame, secondary=None):
+    """Pose the character with a clip at a frame (0..1 = fraction of the clip, else a frame number),
+    with its extra motion (secondary motion, grips, two-hand IK) baked in."""
+    f = anim.pose_at(b.arm, name, frame)
+    act = b.arm.animation_data.action.copy()
+    b.warnings += motion.prepare(b, act, secondary)
+    motion._assign(b.arm, act)
+    bpy.context.scene.frame_set(f)
+    return f
 
 
 def set_expression(b, weights):
@@ -589,6 +641,10 @@ def summary(b):
     co = util.get_coords(b.body)
     out["height_m"] = round(float(co[:, 2].max() - co[:, 2].min()), 3)
     out["skeleton"] = {"standard": "mesh2motion-human", "bones": len(b.arm.data.bones), "pose": "T"}
+    std = set(rig.m2m_bone_names())
+    extra = [x.name for x in b.arm.data.bones if x.name not in std]
+    if extra:
+        out["skeleton"]["extra_bones"] = extra
     keys = b.body.data.shape_keys
     out["blendshapes"] = {"set": "arkit52" if keys else "none", "count": len(keys.key_blocks) - 1 if keys else 0,
                           "meshes": [m.name for m in b.meshes if m.data.shape_keys]}

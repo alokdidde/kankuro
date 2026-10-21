@@ -139,6 +139,91 @@ def validate(spec, project):
             if name not in matlib.REGIONS and not ref.get("mask"):
                 raise CliError("bad_value", f"{field}: region '{name}' needs a mask",
                                hint="Built-in regions: " + ", ".join(matlib.REGIONS) + "; others need \"mask\": <png>")
+    _validate_attachments(spec, project)
+
+
+def check_bone(name, field="bone", extra=()):
+    """A Mesh2Motion bone name (or one of `extra`, e.g. another chain's bones)."""
+    names = catalog.m2m_bones()
+    if name not in names and name not in extra:
+        raise CliError("unknown_bone", f"{field}: unknown bone '{name}'",
+                       hint="Valid Mesh2Motion bones: " + ", ".join(names))
+    return name
+
+
+ID = re.compile(r"^[A-Za-z][A-Za-z0-9_\-]*$")
+
+
+def check_id(i, field):
+    if not isinstance(i, str) or not ID.match(i):
+        raise CliError("bad_value", f"{field}: id '{i}' must start with a letter and use letters, digits, _ or -")
+
+
+def _vec(v, field, n=3):
+    if not (isinstance(v, (list, tuple)) and len(v) == n and all(isinstance(x, (int, float)) for x in v)):
+        raise CliError("bad_value", f"{field}: expected {n} numbers", hint="e.g. 0,0,0.02")
+
+
+def _validate_attachments(spec, project):
+    """accessories[], extra_bones[] and props[]: ids unique across them and the garments."""
+    seen = {g["id"] for g in spec.get("garments", [])}
+    chain_bones = []
+    for c in spec.get("extra_bones") or []:
+        f = f"extra_bones[{c.get('id')}]"
+        check_id(c.get("id"), f)
+        if c["id"] in seen:
+            raise CliError("duplicate_id", f"{f}: id '{c['id']}' is already used")
+        seen.add(c["id"])
+        check_bone(c.get("parent"), f + ".parent", chain_bones)
+        n = c.get("count", 6)
+        if not isinstance(n, int) or not 1 <= n <= 32:
+            raise CliError("bad_value", f"{f}.count must be 1..32")
+        if c.get("follow") not in (None, "hair"):
+            raise CliError("bad_value", f"{f}.follow must be 'hair'")
+        if c.get("material"):
+            _check_material(project, c["material"], f + ".material")
+        color(c.get("color"), f + ".color")
+        chain_bones += [f"{c['id']}_{k + 1:02d}" for k in range(n)]
+    for a in spec.get("accessories") or []:
+        f = f"accessories[{a.get('id')}]"
+        check_id(a.get("id"), f)
+        if a["id"] in seen:
+            raise CliError("duplicate_id", f"{f}: id '{a['id']}' is already used")
+        seen.add(a["id"])
+        if a.get("file"):
+            _check_file(project, a["file"], f + ".file")
+        elif a.get("builtin") not in catalog.ACCESSORIES:
+            raise CliError("unknown_accessory", f"{f}: needs a file or a built-in",
+                           hint="Built-ins: " + ", ".join(catalog.ACCESSORIES))
+        check_bone(a.get("bone"), f + ".bone", chain_bones)
+        if a.get("fit", "none") not in catalog.ACCESSORY_FITS:
+            raise CliError("bad_value", f"{f}.fit must be one of " + ", ".join(catalog.ACCESSORY_FITS))
+        for k in ("offset", "rotate"):
+            if a.get(k) is not None:
+                _vec(a[k], f"{f}.{k}")
+        if a.get("material"):
+            _check_material(project, a["material"], f + ".material")
+        color(a.get("color"), f + ".color")
+    for pr in spec.get("props") or []:
+        f = f"props[{pr.get('id')}]"
+        check_id(pr.get("id"), f)
+        if pr["id"] in seen:
+            raise CliError("duplicate_id", f"{f}: id '{pr['id']}' is already used")
+        seen.add(pr["id"])
+        if pr.get("file"):
+            _check_file(project, pr["file"], f + ".file")
+        elif pr.get("builtin") not in catalog.PROPS:
+            raise CliError("unknown_prop", f"{f}: needs a file or a built-in", hint="Built-ins: " + ", ".join(catalog.PROPS))
+        if pr.get("hand") not in ("l", "r", "both"):
+            raise CliError("bad_value", f"{f}.hand must be l, r or both")
+        if pr.get("grip") and pr["grip"] not in catalog.GRIPS:
+            raise CliError("unknown_grip", f"{f}: unknown grip '{pr['grip']}'", hint="Valid: " + ", ".join(catalog.GRIPS))
+        for k in ("offset", "rotate"):
+            if pr.get(k) is not None:
+                _vec(pr[k], f"{f}.{k}")
+        if pr.get("material"):
+            _check_material(project, pr["material"], f + ".material")
+        color(pr.get("color"), f + ".color")
 
 
 def _check_material(project, ref, field):

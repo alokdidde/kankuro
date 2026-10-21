@@ -29,6 +29,17 @@ def check(path):
     wrong_parent = [b.name for b in arm.data.bones if b.name in ref and
                     (b.parent.name if b.parent else None) != ref[b.name]["parent"]]
     add("hierarchy", not wrong_parent, {"wrong_parent": wrong_parent})
+    # optional extra bones (tails, hanging ornaments, prop sockets) must hang under the standard skeleton
+    groups, orphans = {}, []
+    for n in extra:
+        b = arm.data.bones[n]
+        while b is not None and b.name not in ref:
+            b = b.parent
+        if b is None:
+            orphans.append(n)
+        else:
+            groups.setdefault(b.name, []).append(n)
+    add("extra_bones", not orphans, {"count": len(extra), "by_parent": groups, "unattached": orphans})
     worst, worst_bone = 0.0, None
     mw = arm.matrix_world
     for b in arm.data.bones:

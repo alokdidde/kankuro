@@ -212,6 +212,83 @@ custom prints: `kankuro template <id>`, paint it outside kankuro, then `garment 
                                  "(border, hem, or any name with --mask); PRESET none removes it; repeatable",
               "mask": "greyscale PNG on the garment's UV template, white = in the region",
               "keep_slot": "don't replace the garment already in this slot"}),
+    "accessory": dict(
+        summary="rigid crowns, earrings, necklaces, armlets, bangles on one bone",
+        description="An accessory keeps its shape and follows one bone (or a short hanging chain with "
+                    "--hang). It is modelled on `kankuro reference-body` and carried onto any body shape. "
+                    "--fit settles it: none (rigid; slides along the bone until clear, so a crown rides up "
+                    "a bigger head), wrap (radial scale to hug a limb), chest/neck (the lower part settles "
+                    "onto the chest or the clothes), pierce (rigid, through the body: earrings). Accessories sit over garments; a band round the head "
+                    "presses the hair under it.",
+        examples="""\
+  kankuro accessory add circlet                          # a built-in (see list)
+  kankuro accessory add crown --file crown.glb --bone head --material gold
+  kankuro accessory add kundal_l --file earring.glb --bone head --hang 2
+  kankuro accessory add haar --file necklace.glb --bone spine_03 --hang 3 --fit chest --material gold
+  kankuro accessory add bajuband_l --file armlet.glb --bone upperarm_l --fit wrap
+  kankuro accessory set crown --offset 0,0,0.01 --rotate 0,0,5 --scale 1.05
+  kankuro accessory remove crown
+  kankuro accessory list
+built-ins: {accessories}""",
+        args={"action": "add | set | remove | list",
+              "id": "the accessory's id (also its mesh name in the GLB); add <built-in name> uses that built-in",
+              "file": "mesh modelled on the reference body", "builtin": "a built-in accessory",
+              "bone": "the Mesh2Motion bone it follows", "fit": "none | wrap | chest | neck | pierce",
+              "hang": "extra bones for a dangling part (they swing on clips)",
+              "offset": "x,y,z metres (x = character's left, y = back, z = up)",
+              "rotate": "x,y,z degrees about its centre", "scale": "uniform scale",
+              "material": "material preset (`catalog materials`) or none", "color": "base colour",
+              "roughness": "roughness override", "layer": "stacking (default 10, over every garment)",
+              "hide_hair": "press hair under a band round the head (default true on the head bone)"}),
+    "prop": dict(
+        summary="objects held in the hand, with a grip pose",
+        description="A prop is rigid and hangs from a socket bone (prop_l / prop_r) under the hand. Its "
+                    "grip is a finger pose baked over every clip's finger channels; contact grips curl each "
+                    "finger until it touches the prop. --hand both keeps the other hand on the prop with "
+                    "IK and reports clips it can't reach in `warnings`.",
+        examples="""\
+  kankuro prop add staff                                 # built-in walking staff in the right hand
+  kankuro prop add bow --file bow.glb --hand l --grip power
+  kankuro prop add flute --hand both --anchor r --grip flute
+  kankuro prop set bow --offset 0,0.02,0 --rotate 0,90,0
+  kankuro render --animation Walk --frame 0.3 --views front,side
+  kankuro prop remove bow
+built-ins: {props}
+grips: {grips}""",
+        args={"action": "add | set | remove | list", "id": "the prop's id; add <built-in name> uses that built-in",
+              "file": "mesh modelled on the reference body, held in the T-posed hand",
+              "builtin": "a built-in prop", "hand": "l | r | both", "anchor": "both: the hand that holds it",
+              "grip": "finger pose (`grip list`)", "grip_weight": "0..1 blend over the clip's fingers",
+              "reach": "both: where the other hand holds, metres along the prop from the grip towards the index "
+                       "finger (negative: towards the little finger; default -0.3)",
+              "offset": "x,y,z metres", "rotate": "x,y,z degrees about the grip", "scale": "uniform scale",
+              "material": "material preset or none", "color": "base colour", "roughness": "roughness override"}),
+    "grip": dict(
+        summary="list the finger poses for props",
+        description="Contact grips curl each finger joint until it touches the prop; the others are fixed poses.",
+        examples="  kankuro grip list",
+        args={"action": "list"}),
+    "bones": dict(
+        summary="extra bone chains: tails, braids, dangling ornaments",
+        description="An extra chain hangs under a standard bone and never changes the 65 Mesh2Motion bones, "
+                    "so clips still play. `build` and `render` bake its follow-through (a damped spring "
+                    "with gravity, kept out of the legs) into every clip; it loops cleanly. With --radius "
+                    "the chain gets a tapered tube mesh (a tail); --follow hair takes over the hanging hair "
+                    "(a braid or ponytail).",
+        examples="""\
+  kankuro bones add tail --parent pelvis --count 8 --length 0.9 --curve up:0.3 --taper 0.5 --radius 0.035
+  kankuro bones add braid --parent head --count 5 --follow hair
+  kankuro bones list
+  kankuro bones remove tail
+  kankuro build --animations Idle_A,Walk --secondary-motion tail,braid""",
+        args={"action": "add | set | remove | list", "id": "chain id; bones are <id>_01, <id>_02, ...",
+              "parent": "the standard bone it hangs from", "count": "number of bones (1..32)",
+              "length": "total length in metres", "taper": "0..1: how much shorter/thinner towards the tip",
+              "curve": "up:F or down:F, how far the chain bends along its length (1 = half a turn)",
+              "radius": "radius of the tube mesh (0 = no mesh)", "color": "tube colour (default: hair colour)",
+              "material": "tube material preset", "follow": "hair: bind the hanging hair to the chain",
+              "stiffness": "spring back to the rest shape (default 0.35)", "damping": "default 0.25",
+              "gravity": "default 1.0", "no_motion": "keep it rigid in clips (no follow-through)"}),
     "template": dict(
         summary="write UV template + mask PNGs for repainting garments or skin",
         description="For each target writes <id>_template.png (flat sketch: left half = front, right half "
@@ -234,6 +311,7 @@ custom prints: `kankuro template <id>`, paint it outside kankuro, then `garment 
   kankuro build
   kankuro build --animations Idle_A,Walk,Jog
   kankuro build --out ./out/hero.glb --render
+  kankuro build --animations Idle_A,Walk --secondary-motion tail,braid
   kankuro set face.blendshapes=none && kankuro build   # leave out the facial rig (smaller file)
 then: kankuro validate build/<name>.glb
 facial rig: the Body mesh carries the 52 ARKit blendshapes (jawOpen, eyeBlinkLeft, mouthSmileRight, ...)
@@ -243,7 +321,9 @@ List them with `kankuro catalog expressions`; preview with `kankuro render --exp
               "animations": "Mesh2Motion clips, comma-separated, or all (see `kankuro animations`)",
               "render": "also render preview views",
               "size": "preview image height (with --render)",
-              "samples": "preview Cycles samples (with --render)"}),
+              "samples": "preview Cycles samples (with --render)",
+              "secondary_motion": "extra bone chains whose follow-through is baked into the clips: all "
+                                  "(default), none, or chain ids"}),
     "render": dict(
         summary="preview PNGs (views, head close-up, animation pose, expression)",
         description="Renders with Cycles on the CPU and writes one PNG per view plus <prefix>_sheet.png. "
@@ -266,7 +346,8 @@ List them with `kankuro catalog expressions`; preview with `kankuro render --exp
               "size": "image height in pixels (default 512)",
               "samples": "Cycles samples (default 12)",
               "out": "output folder (default <project>/renders)",
-              "prefix": "file name prefix"}),
+              "prefix": "file name prefix",
+              "secondary_motion": "with --animation: extra chains to simulate (all, none, or ids)"}),
     "animations": dict(
         summary="list the Mesh2Motion animation clips",
         description="Clips for `build --animations` and `render --animation`. Names ending in _RM have root motion.",
@@ -284,8 +365,13 @@ List them with `kankuro catalog expressions`; preview with `kankuro render --exp
                     "No project needed.",
         examples="""\
   kankuro autorig knight.glb --out knight_rigged.glb
-  kankuro autorig robot.fbx --out robot.glb --animations Idle_A,Walk --render ./check""",
+  kankuro autorig robot.fbx --out robot.glb --animations Idle_A,Walk --render ./check
+  kankuro autorig vanara.glb --out vanara.glb --extra-chain tail:Tail:8 --animations Walk
+  kankuro autorig farmer.glb --out farmer.glb --prop staff --prop ./hoe.glb:l:power --animations Idle_A""",
         args={"mesh": "input .glb, .gltf, .obj or .fbx",
+              "prop": "NAME[:HAND[:GRIP]]: a built-in prop or a mesh file put in the hand (repeatable)",
+              "extra_chain": "ID:PART[:COUNT]: an extra bone chain through a mesh part or vertex group of the "
+                             "file (a tail), with follow-through on the clips (repeatable)",
               "out": "output GLB",
               "facing": "which way the model faces (default auto, detected from the feet)",
               "animations": "clips to bake in, comma-separated",
@@ -330,6 +416,9 @@ def names():
            "hair_styles": ", ".join(catalog.HAIR_STYLES), "garments": ", ".join(catalog.GARMENTS)}
     from . import matlib
     out["materials"] = ", ".join(matlib.MATERIALS)
+    out["accessories"] = ", ".join(catalog.ACCESSORIES)
+    out["props"] = ", ".join(catalog.PROPS)
+    out["grips"] = ", ".join(catalog.GRIPS)
     try:
         from . import fabric
         out["fabrics"] = ", ".join(fabric.FABRICS) + ", none"
