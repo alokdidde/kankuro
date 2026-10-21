@@ -24,6 +24,9 @@ quick start:
   kankuro -p ./hero build --animations Idle_A,Walk
   kankuro validate hero/build/hero.glb
 
+facial rig: every GLB carries the 52 ARKit blendshapes on the body (see `kankuro build --help`);
+  preview them with `kankuro render --focus head --expression smile`.
+
 learn more from the terminal:
   kankuro guide              how to drive kankuro as an agent (start here)
   kankuro guide --list       all guide topics (cli reference, spec format, textures, ...)
@@ -74,6 +77,7 @@ settable paths:
   kankuro catalog
   kankuro catalog garments
   kankuro catalog colors
+  kankuro catalog expressions      # the 52 ARKit blendshape names + expression presets
 sections: {catalog_sections}""",
         args={"section": "print only this section"}),
     "morphs": dict(
@@ -114,7 +118,8 @@ skin colour names: {skin_colors}""",
   kankuro face randomize --groups eyes,nose --seed 12
   kankuro face reset --groups nose
 presets: {face_presets}
-then check: kankuro render --focus head --views front,three_quarter,side""",
+then check: kankuro render --focus head --views front,three_quarter,side
+(face *shape* only; facial *expressions* are the ARKit blendshapes, see `kankuro render --help`)""",
         args={"action": "list | set | preset | randomize | reset",
               "values": "set: SLIDER=VALUE ...; preset: one or more preset names",
               "group": "list: only this group",
@@ -215,7 +220,11 @@ custom prints: `kankuro template <id>`, paint it outside kankuro, then `garment 
   kankuro build
   kankuro build --animations Idle_A,Walk,Jog
   kankuro build --out ./out/hero.glb --render
-then: kankuro validate build/<name>.glb""",
+  kankuro set face.blendshapes=none && kankuro build   # leave out the facial rig (smaller file)
+then: kankuro validate build/<name>.glb
+facial rig: the Body mesh carries the 52 ARKit blendshapes (jawOpen, eyeBlinkLeft, mouthSmileRight, ...)
+as named glTF morph targets at weight 0, ready for ARKit / Live Link / three.js face tracking.
+List them with `kankuro catalog expressions`; preview with `kankuro render --expression`.""",
         args={"out": "output GLB (default <project>/build/<name>.glb)",
               "animations": "Mesh2Motion clips, comma-separated, or all (see `kankuro animations`)",
               "render": "also render preview views",
@@ -231,12 +240,15 @@ then: kankuro validate build/<name>.glb""",
   kankuro render --animation Jog --frame 0.3       # clothes mid-stride
   kankuro render --focus head --expression smile
   kankuro render --expression "jawOpen=0.6,eyeBlinkLeft=1"
+  kankuro render --focus head --expression "smile,jawOpen=0.2"   # preset plus tweaks
   kankuro render --size 384 --samples 8            # faster while iterating""",
         args={"views": "comma-separated: front, three_quarter, side, back (default all four)",
               "focus": "full (default), upper, or head",
               "animation": "pose from a Mesh2Motion clip",
               "frame": "with --animation: 0..1 = fraction of the clip, >1 = frame number",
-              "expression": "preset ({expressions}) and/or ARKit weights like jawOpen=0.6",
+              "expression": "facial expression from the ARKit blendshapes: a preset ({expressions}), "
+                            "NAME=WEIGHT pairs (0..1; names from `kankuro catalog expressions`), or both, "
+                            "comma-separated. Needs face.blendshapes=arkit52 (the default)",
               "size": "image height in pixels (default 512)",
               "samples": "Cycles samples (default 12)",
               "out": "output folder (default <project>/renders)",
@@ -267,8 +279,9 @@ then: kankuro validate build/<name>.glb""",
               "method": "skinning: auto (heat, then fallbacks), heat, proximity"}),
     "validate": dict(
         summary="check a GLB against the Mesh2Motion human standard",
-        description="Checks bone names, hierarchy, rest orientations, T-pose and skin weights. Any check "
-                    "with \"pass\": false says what is off.",
+        description="Checks bone names, hierarchy, rest orientations, T-pose and skin weights, and for files "
+                    "with facial blendshapes that all 52 ARKit shapes are present (arkit_blendshapes) and rest "
+                    "at weight 0 (blendshapes_at_rest). Any check with \"pass\": false says what is off.",
         examples="  kankuro validate build/hero.glb", args={"glb": "the GLB to check"}),
     "schema": dict(
         summary="machine-readable summary of every command (JSON)",

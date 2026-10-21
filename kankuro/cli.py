@@ -793,7 +793,7 @@ def parser():
     for name, sub in sp.choices.items():
         args = helptext.COMMANDS.get(name, {}).get("args", {})
         for act in sub._actions:
-            if act.dest in args and not act.help:
+            if act.dest in args:
                 act.help = helptext.fill(args[act.dest], names).replace("%", "%%")
     return ap
 

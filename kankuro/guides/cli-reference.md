@@ -753,7 +753,9 @@ kankuro autorig robot.glb --out robot_rigged.glb --animations Idle_A,Walk --rend
 ### validate
 
 Check a GLB against the Mesh2Motion human standard: bone names and hierarchy, rest orientations,
-T-pose, skin weights.
+T-pose, skin weights. Files that carry facial blendshapes are also checked for all 52 ARKit shapes
+(`arkit_blendshapes`, listing any `missing`) and for every morph weight resting at 0
+(`blendshapes_at_rest`; otherwise engines would show an expression by default).
 
 ```
 kankuro validate <glb>
