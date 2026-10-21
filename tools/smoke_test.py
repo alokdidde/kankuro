@@ -25,6 +25,9 @@ def run(cli, *args):
 
 def main():
     cli = sys.argv[1]
+    if os.path.exists(cli):
+        # cmd.exe misreads a relative "dir/kankuro.cmd" as the command "dir" with a switch.
+        cli = os.path.abspath(cli)
     tmp = tempfile.mkdtemp(prefix="kankuro-smoke-")
     proj = os.path.join(tmp, "hero")
     run(cli, "schema")
