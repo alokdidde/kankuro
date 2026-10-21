@@ -57,6 +57,40 @@ def make(name, color=None, image_path=None, roughness=0.6, metallic=0.0, double_
     return mat
 
 
+def make_hair(name, image_path, roughness=0.55, anisotropic=0.45, cutoff=0.4):
+    """Strand-card material: colour + alpha from an RGBA atlas, alpha-clipped (exports as glTF MASK, which
+    needs no sorting in game engines), with a highlight stretched across the strands."""
+    mat = bpy.data.materials.new(name)
+    nt = mat.node_tree
+    bsdf = nt.nodes.get("Principled BSDF")
+    tex = nt.nodes.new("ShaderNodeTexImage")
+    tex.image = bpy.data.images.load(os.path.abspath(image_path))
+    nt.links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
+    # glTF alpha clip pattern: 1 - (alpha < cutoff)
+    lt = nt.nodes.new("ShaderNodeMath")
+    lt.operation = "LESS_THAN"
+    lt.inputs[1].default_value = cutoff
+    nt.links.new(tex.outputs["Alpha"], lt.inputs[0])
+    inv = nt.nodes.new("ShaderNodeMath")
+    inv.operation = "SUBTRACT"
+    inv.inputs[0].default_value = 1.0
+    nt.links.new(lt.outputs[0], inv.inputs[1])
+    nt.links.new(inv.outputs[0], bsdf.inputs["Alpha"])
+    bsdf.inputs["Roughness"].default_value = roughness
+    bsdf.inputs["Specular IOR Level"].default_value = 0.25
+    if anisotropic:
+        # cards run along V, so the UV tangent (along U) lies across the strands
+        tan = nt.nodes.new("ShaderNodeTangent")
+        tan.direction_type = "UV_MAP"
+        tan.uv_map = "UVMap"
+        bsdf.inputs["Anisotropic"].default_value = anisotropic
+        nt.links.new(tan.outputs["Tangent"], bsdf.inputs["Tangent"])
+    mat.use_backface_culling = False
+    if hasattr(mat, "surface_render_method"):
+        mat.surface_render_method = "DITHERED"
+    return mat
+
+
 def tinted_image(src, color, out):
     """Multiply an image by a colour (so a texture + tint exports as one glTF base colour map)."""
     im = Image.open(src).convert("RGBA")

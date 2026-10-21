@@ -1,20 +1,37 @@
 """Built-in content: hair styles and standard garments."""
 
-# Hair: generated from the scalp of the current body so it always fits.
-#   offset: gap above the scalp; thickness: shell thickness;
+# Hair: generated from the scalp of the current body so it always fits. The hair volume is an opaque,
+# darker base layer; strand cards (ribbons with an alpha strand texture) are grown over it along the
+# combing direction, in overlapping layers.
+#   offset: gap above the scalp; thickness: (unused by cards, kept for imported specs);
 #   length: how far side/back hair falls below the hairline (metres, 0 = none);
 #   extras: added shapes (ponytail, bun); crest: mohawk strip half-width
+#   flow: combing direction: "crown" (out from the crown), "part" (away from a parting at x=`part`, then
+#         down), "back" (pulled back to the ponytail/bun, or the nape)
+#   card_len / card_width: typical card size; card_lift: how far cards stack above the base;
+#   card_density: layers of cover; curl: strand wave amplitude (radians); cards: False = base layer only
 HAIR_STYLES = {
-    "buzz": {"desc": "Very short buzz cut that follows the scalp", "offset": 0.002, "thickness": 0.002, "length": 0.0},
-    "short": {"desc": "Short layered cut with some volume", "offset": 0.010, "thickness": 0.008, "length": 0.0},
-    "bob": {"desc": "Chin-length bob", "offset": 0.012, "thickness": 0.010, "length": 0.11},
-    "long": {"desc": "Straight hair past the shoulders", "offset": 0.010, "thickness": 0.008, "length": 0.34},
+    "buzz": {"desc": "Very short buzz cut that follows the scalp", "offset": 0.002, "thickness": 0.002, "length": 0.0,
+             "flow": "crown", "cards": False},
+    "short": {"desc": "Short layered cut with some volume", "offset": 0.010, "thickness": 0.008, "length": 0.0,
+              "flow": "crown", "card_len": 0.06, "card_width": 0.016, "card_lift": 0.006, "card_density": 5.0},
+    "bob": {"desc": "Chin-length bob", "offset": 0.012, "thickness": 0.010, "length": 0.11,
+            "flow": "part", "part": 0.02, "card_len": 0.14, "card_width": 0.018, "card_lift": 0.006,
+            "card_density": 5.0},
+    "long": {"desc": "Straight hair past the shoulders", "offset": 0.010, "thickness": 0.008, "length": 0.34,
+             "flow": "part", "part": 0.0, "card_len": 0.24, "card_width": 0.02, "card_lift": 0.006,
+             "card_density": 5.0},
     "ponytail": {"desc": "Pulled back with a ponytail", "offset": 0.006, "thickness": 0.006, "length": 0.0,
-                 "extras": ["ponytail"]},
-    "bun": {"desc": "Pulled back into a bun", "offset": 0.006, "thickness": 0.006, "length": 0.0, "extras": ["bun"]},
-    "afro": {"desc": "Big rounded afro", "offset": 0.055, "thickness": 0.02, "length": 0.0, "round": 0.8},
+                 "extras": ["ponytail"], "flow": "back", "card_len": 0.12, "card_width": 0.016,
+                 "card_lift": 0.004, "card_density": 5.0},
+    "bun": {"desc": "Pulled back into a bun", "offset": 0.006, "thickness": 0.006, "length": 0.0, "extras": ["bun"],
+            "flow": "back", "card_len": 0.10, "card_width": 0.016, "card_lift": 0.004, "card_density": 5.0},
+    "afro": {"desc": "Big rounded afro", "offset": 0.055, "thickness": 0.02, "length": 0.0, "round": 0.8,
+             "flow": "crown", "card_len": 0.05, "card_width": 0.02, "card_lift": 0.012, "card_density": 3.5,
+             "curl": 0.6, "card_jitter": 0.6},
     "mohawk": {"desc": "Shaved sides with a tall centre crest", "offset": 0.002, "thickness": 0.002, "length": 0.0,
-               "crest": 0.028},
+               "crest": 0.028, "flow": "back", "card_len": 0.03, "card_width": 0.012, "card_lift": 0.002,
+               "card_density": 5.0},
 }
 
 # Garments: cut from MakeHuman's "tights" helper (or skirt helper) and conformed to the body.

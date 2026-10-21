@@ -75,7 +75,7 @@ that loads the project checks it, so a mistake shows up as a normal JSON error w
 | `texture` | path or `null` | `null` | PNG on the body UV layout (`kankuro template body`); replaces the flat tone |
 | `roughness` | number | 0.6 | material roughness |
 | `lips` | bool | true | tint the lips |
-| `brows` | bool | true | eyebrows on or off |
+| `brows` | bool | true | eyebrows on or off (individual strand cards, see [hair](cli-reference.md#hair)) |
 | `brow_color` | hex or `null` | `null` | eyebrow colour; `null` follows the hair colour |
 | `brow_thickness` | 0.3..2 | 1.0 | eyebrow band height (0.5 thin, 1.6 bushy) |
 | `brow_arch` | -1..1 | 0.0 | -1 flat/straight, 1 high arch |

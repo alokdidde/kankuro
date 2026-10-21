@@ -7,10 +7,10 @@ import numpy as np
 from mathutils import Vector, interpolate
 from mathutils.bvhtree import BVHTree
 
-from .. import catalog, face, morph, textures
+from .. import catalog, face, hairtex, morph, textures
 from .. import spec as specmod
 from ..errors import CliError
-from . import anim, body, garments, hair, materials, rig, util
+from . import anim, body, garments, hair, hair_cards, materials, rig, util
 
 
 class Built:
@@ -349,9 +349,12 @@ def build_scene(spec, project, work_dir):
     if skin.get("texture"):
         img = os.path.join(project, skin["texture"])
     else:
+        hs = spec.get("hair") or {}
+        scalp = hair.scalp_mask(res, hs["style"]) if hs.get("style") and not hs.get("source") else None
         img = textures.skin_texture(skin["color"], os.path.join(work_dir, "skin.png"),
                                     lips=skin.get("lips", True), brows=skin.get("brows", True),
-                                    brow_hex=skin.get("brow_color"))
+                                    brow_hex=skin.get("brow_color"), scalp=scalp,
+                                    scalp_hex=hs.get("color") or "#3b2a1e")
     skin_n = textures.skin_detail(os.path.join(work_dir, "skin"))
     body_obj.data.materials.append(materials.make("Skin", image_path=img, roughness=skin.get("roughness", 0.6),
                                                   normal_path=skin_n, subsurface=0.3, specular=0.35))
@@ -364,26 +367,50 @@ def build_scene(spec, project, work_dir):
     # hair
     h = spec.get("hair")
     if h:
+        color = h.get("color") or "#3b2a1e"
         if h.get("source"):
             hobj = import_mesh_file(os.path.join(project, h["source"]), "Hair")
             conform_imported(hobj, reference_coords(), res, bone_filter=hair.HEAD_BONES)
             util.add_armature_modifier(hobj, res.arm)
+            if h.get("texture"):
+                himg = materials.tinted_image(os.path.join(project, h["texture"]), h.get("tint"),
+                                              os.path.join(work_dir, "hair.png"))
+            elif hobj.data.materials and hobj.data.materials[0]:
+                himg = None
+            else:
+                himg = materials.hair_texture(color, os.path.join(work_dir, "hair.png"))
+            if himg or not hobj.data.materials:
+                hobj.data.materials.clear()
+                hobj.data.materials.append(materials.make("Hair", image_path=himg, color=color, roughness=0.65,
+                                                          double_sided=True))
         else:
             hobj = hair.make(res, body_obj, h["style"])
-        color = h.get("color") or "#3b2a1e"
-        if h.get("texture"):
-            himg = materials.tinted_image(os.path.join(project, h["texture"]), h.get("tint"),
-                                          os.path.join(work_dir, "hair.png"))
-        elif h.get("source") and hobj.data.materials and hobj.data.materials[0]:
-            himg = None
-        else:
-            himg = materials.hair_texture(color, os.path.join(work_dir, "hair.png"))
-        if himg or not hobj.data.materials:
-            hobj.data.materials.clear()
-            hobj.data.materials.append(materials.make("Hair", image_path=himg, color=color, roughness=0.65,
-                                                      double_sided=True))
+            style = catalog.HAIR_STYLES[h["style"]]
+            if style.get("cards", True):
+                base_img = hairtex.base_texture(color, os.path.join(work_dir, "hair_base.png"))
+            else:
+                base_img = hairtex.stubble_texture(color, os.path.join(work_dir, "hair_base.png"))
+            if h.get("texture"):  # a strand atlas (RGBA, see hairtex) replaces the generated one
+                cards_img = materials.tinted_image(os.path.join(project, h["texture"]), h.get("tint"),
+                                                   os.path.join(work_dir, "hair_cards.png"))
+            else:
+                cards_img = hairtex.strand_atlas(color, os.path.join(work_dir, "hair_cards.png"),
+                                                 wave=0.025 + 0.06 * style.get("curl", 0.0))
+            hobj.data.materials[0] = materials.make("HairBase", image_path=base_img, roughness=0.75)
+            hobj.data.materials[1] = materials.make_hair("Hair", cards_img)
         b.meshes.append(hobj)
         t = _tick(b, "hair", t)
+    if skin.get("brows", True):
+        bobj = hair_cards.brows(res, body_obj, thickness=skin.get("brow_thickness") or 1.0,
+                                arch=skin.get("brow_arch") or 0.0, density=skin.get("brow_density") or 1.0,
+                                length=skin.get("brow_length") or 1.0)
+        hair_cards.follow_shape_keys(bobj, body_obj)
+        brow_hex = skin.get("brow_color") or (h or {}).get("color") or "#2a1d14"
+        bimg = hairtex.brow_atlas(brow_hex, os.path.join(work_dir, "brows.png"))
+        bobj.data.materials.append(materials.make_hair("Eyebrows", bimg, roughness=0.5, anisotropic=0.3))
+        util.add_armature_modifier(bobj, res.arm)
+        b.meshes.append(bobj)
+        t = _tick(b, "brows", t)
 
     # garments, inner layers first
     covers, covers_all, to_shade = [], [], []

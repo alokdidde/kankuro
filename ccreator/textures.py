@@ -96,8 +96,11 @@ def _blur(a, r=2):
     return np.apply_along_axis(lambda x: np.convolve(x, k, mode="same"), 1, a)
 
 
-def skin_texture(skin_hex, out, size=1024, lips=True, brows=True, brow_hex=None):
-    """Flat skin tone with soft lips and brows painted on the MakeHuman body UV layout."""
+def skin_texture(skin_hex, out, size=1024, lips=True, brows=True, brow_hex=None, scalp=None, scalp_hex=None):
+    """Flat skin tone with soft lips and brows painted on the MakeHuman body UV layout.
+
+    scalp: optional per base-vertex weight (hair.scalp_mask) tinted towards scalp_hex, with a speckled
+    edge, so the hairline reads as hair growing out of the skin rather than a layer laid on top."""
     from .blender_free import hex_rgb
     tone = np.array(hex_rgb(skin_hex))
     img = np.ones((size, size, 3), dtype=np.float32) * tone
@@ -117,9 +120,17 @@ def skin_texture(skin_hex, out, size=1024, lips=True, brows=True, brow_hex=None)
     if brows:
         m = _brow_mask()
         br = raster_scalar(tuv, m[tv], size)
-        br = _blur(br, 1)[..., None]
+        # only a faint shadow under the brow hairs (blender/hair_cards.brows); a solid paint reads as a smudge
+        br = _blur(br, 2)[..., None]
         bc = np.array(hex_rgb(brow_hex)) if brow_hex else tone * 0.35
-        img = img * (1 - 0.85 * br) + bc * 0.85 * br
+        img = img * (1 - 0.4 * br) + bc * 0.4 * br
+    if scalp is not None and scalp_hex:
+        sc = _blur(raster_scalar(tuv, scalp[tv], size), 2)
+        speck = np.clip(_noise((size, size), 1.5, rng) * 0.6 + 0.5, 0, 1)
+        # the fade below the hairline is broken into fine dots (follicles / baby hairs), not a soft smear
+        sc = np.where(sc < 0.95, sc * (0.35 + 0.9 * speck), sc).clip(0, 1)[..., None]
+        hc = tone * 0.45 + np.array(hex_rgb(scalp_hex)) * 0.55
+        img = img * (1 - 0.8 * sc) + hc * 0.8 * sc
     Image.fromarray((np.clip(img, 0, 1) * 255).astype(np.uint8)).save(out)
     return out
 

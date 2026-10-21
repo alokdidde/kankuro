@@ -37,6 +37,7 @@ def _setup(size, samples):
     sc.cycles.device = "CPU"
     sc.cycles.samples = samples
     sc.cycles.use_denoising = False
+    sc.cycles.transparent_max_bounces = 64  # layered hair cards
     sc.render.resolution_x = size
     sc.render.resolution_y = size
     sc.render.film_transparent = False

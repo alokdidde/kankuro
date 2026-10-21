@@ -156,7 +156,7 @@ Values are parsed as JSON when they can be (`0.6`, `183`, `true`, `null`), other
 | `body.height_cm` | 50..250 or `null` | exact standing height; the body is scaled to it after the sliders |
 | `skin.color` | hex or [name](#colour-names) | whole-body skin tone |
 | `skin.roughness` | number | skin roughness (default 0.6) |
-| `skin.lips` / `skin.brows` | bool | tinted lips / painted eyebrows on or off |
+| `skin.lips` / `skin.brows` | bool | tinted lips / eyebrows (strand cards plus a faint painted shadow) on or off |
 | `skin.brow_color` | hex, hair-colour name or `null` | eyebrow colour (`null` = follow the hair colour) |
 | `skin.brow_thickness` / `brow_arch` / `brow_density` / `brow_length` | number | eyebrow shape, see [brows](#brows) |
 | `eyes.iris_color` | hex, eye-colour name or `null` | iris colour (`null` = the default brown eye texture) |
@@ -467,6 +467,23 @@ kankuro hair remove
 
 `hair set` keeps the current colour if you don't pass `--color` (default `#3b2a1e`).
 
+Procedural hair is a mesh named `Hair` with two materials: `HairBase`, an opaque layer that gives the
+hair its volume (slightly darker, so gaps read as depth), and `Hair`, the **cards**: narrow ribbons with
+an RGBA strand texture, grown along the style's combing direction (out from the crown, away from a
+parting, or back to the ponytail/bun) in overlapping layers. Cards shade with the normals of the hair
+volume, use an anisotropic highlight, and export as glTF `alphaMode: MASK` (no sorting problems in
+game engines). `buzz` has no cards (fine stubble texture on the base layer).
+
+`hair set --texture PNG` replaces the generated strand atlas: an RGBA image split into **4 vertical
+strips** (one card variant each), strands running from the root at the **top** to the tip at the
+bottom, alpha = strand coverage. Leave the top ~15% fading in from transparent so card roots blend
+into the layer below.
+
+Eyebrows (`Eyebrows` mesh) are grown the same way over the brow, as single tapered hairs: inner hairs
+stand up, the body sweeps out to the temple, upper and lower rows meet in the middle. They are shaped
+by `brows` (`skin.brow_thickness`, `brow_arch`, `brow_density`, `brow_length`) and copy the body's
+brow blendshapes (`browInnerUp`, `browOuterUp*`, `browDown*`) so they move with expressions.
+
 `hair import` takes your own hair mesh (`.glb`, `.gltf`, `.obj`, `.fbx`) modelled on the reference
 body (see [reference-body](#reference-body)). It's moved onto the current head shape and skinned
 automatically.
@@ -630,7 +647,7 @@ kankuro build [--out GLB] [--animations A,B,...|all] [--render] [--size PX] [--s
 | `--render` | | also render preview views (`renders/build_*.png`) |
 | `--size`, `--samples` | 512, 12 | for `--render` |
 
-The GLB has the body, eyes, hair and each garment as separate skinned meshes, one armature, PBR
+The GLB has the body, eyes, hair, eyebrows and each garment as separate skinned meshes, one armature, PBR
 materials (garments get baked `baseColorTexture` and `normalTexture`), the requested clips, and
 the 52 ARKit facial blendshapes as morph targets on the body.
 

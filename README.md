@@ -34,7 +34,11 @@ carry a `code` and a `hint`, the whole character lives in one inspectable `chara
   height, proportions, ethnicity mix, breast size) plus 238 detailed face and body morphs.
 * **Skeleton:** the exact **Mesh2Motion human rig** (65 bones plus root, Unreal-style names, T-pose rest,
   identical bone orientations), so Mesh2Motion animations play unchanged. `validate` checks this.
-* **Hair:** 8 procedural styles grown from the current scalp, or your own mesh.
+* **Hair:** 8 procedural styles grown from the current scalp, or your own mesh. Procedural hair is built
+  from **hair cards**: hundreds of narrow ribbons with an alpha strand texture, combed along each style's
+  flow and layered over a darker base, so it reads as locks of hair rather than a solid helmet.
+  **Eyebrows** are individual strand cards too, and follow the ARKit brow blendshapes.
+  See [examples/hair_styles.png](examples/hair_styles.png) and [examples/hair_before_after.png](examples/hair_before_after.png).
 * **Clothes:** 12 standard garments cut from the body and conformed to it, auto-skinned and layered,
   with skin hidden underneath. Each one has a **front/back UV template** that an image model can repaint.
   The repainted PNG is passed back in with `--texture`.
