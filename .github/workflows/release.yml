@@ -5,11 +5,18 @@ name: Release
 #   - self-contained bundles (Python 3.13 + bpy + kankuro) for Linux x64, macOS arm64,
 #     Windows x64 and Windows arm64, each smoke-tested on its own runner
 #   - SHA256SUMS.txt
-# Run it by hand (Actions > Release > Run workflow) to build and test everything without publishing.
+# Pull requests that touch packaging run it as a dry run (build and smoke-test every bundle, no
+# release), and so does Actions > Release > Run workflow.
 
 on:
   push:
     tags: ["v*"]
+  pull_request:
+    paths:
+      - .github/workflows/release.yml
+      - tools/make_bundle.py
+      - tools/smoke_test.py
+      - pyproject.toml
   workflow_dispatch:
 
 permissions:
@@ -17,6 +24,8 @@ permissions:
 
 jobs:
   test:
+    # On pull requests the CI workflow already runs the tests.
+    if: github.event_name != 'pull_request'
     uses: ./.github/workflows/ci.yml
 
   dist:
