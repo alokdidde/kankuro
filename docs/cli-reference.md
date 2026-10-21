@@ -158,6 +158,7 @@ Values are parsed as JSON when they can be (`0.6`, `183`, `true`, `null`), other
 | `skin.lips` / `skin.brows` | bool | tinted lips / painted eyebrows on or off |
 | `skin.brow_color` | hex or `null` | eyebrow colour (`null` = a darker shade of the skin tone) |
 | `eyes.iris_color` | hex or `null` | iris colour (`null` = the default brown eye texture) |
+| `face.blendshapes` | `arkit52` or `none` | facial blendshapes in the GLB (default `arkit52`, see [Facial expressions](#facial-expressions)) |
 | `export.hide_body_under_clothes` | bool | delete body faces fully covered by clothes (default `true`, avoids poke-through) |
 | `export.texture_size` | int | resolution of baked garment maps (default 2048) |
 | `name` | string | character name |
@@ -191,11 +192,11 @@ Prints `{"changed": {...}, "spec": {...}}`. Errors: `bad_assignment`, `bad_path`
 List what's available.
 
 ```
-kankuro catalog [presets|body_sliders|hair_styles|garments|fabrics]
+kankuro catalog [presets|body_sliders|hair_styles|garments|fabrics|expressions]
 ```
 
 With no section it prints everything. Garment entries include `slot`, `layer` and default
-`fabric`. See [Garment types](#garment-types) for the current list.
+`fabric`. `expressions` lists the 52 ARKit blendshape names and the expression presets. See [Garment types](#garment-types) for the current list.
 
 ### morphs
 
@@ -379,7 +380,8 @@ Preview PNGs, rendered with Cycles on the CPU. Use them to check the result visu
 
 ```
 kankuro render [--views V1,V2,...] [--focus full|upper|head]
-               [--animation CLIP --frame F] [--size PX] [--samples N] [--out DIR] [--prefix NAME]
+               [--animation CLIP --frame F] [--expression EXPR]
+               [--size PX] [--samples N] [--out DIR] [--prefix NAME]
 ```
 
 | option | default | meaning |
@@ -388,6 +390,7 @@ kankuro render [--views V1,V2,...] [--focus full|upper|head]
 | `--focus` | `full` | `upper` frames the top half; `head` is a face and hair close-up |
 | `--animation` | | pose the character from a Mesh2Motion clip (see [animations](#animations)) |
 | `--frame` | 0.25 | with `--animation`: 0..1 is a fraction of the clip, above 1 is a frame number |
+| `--expression` | | a facial expression: a preset (`smile`, `laugh`, `surprise`, `angry`, `sad`, `blink`, `kiss`), ARKit weights (`jawOpen=0.6,eyeBlinkLeft=1`), or both (`smile,jawOpen=0.2`) |
 | `--size` | 512 | image height in pixels |
 | `--samples` | 12 | Cycles samples; raise for cleaner images, lower for speed |
 | `--out` | `<project>/renders` | output folder |
@@ -399,9 +402,10 @@ Writes one PNG per view plus a combined `<prefix>_sheet.png`.
 kankuro render                                  # all four views
 kankuro render --focus head --views front,three_quarter
 kankuro render --animation Jog --frame 0.3      # check how clothes deform mid-stride
+kankuro render --focus head --expression surprise
 ```
 
-Prints `{"views": {"front": "<png>", ...}, "sheet": "<png>", "animation", "frame", "focus"}`.
+Prints `{"views": {"front": "<png>", ...}, "sheet": "<png>", "animation", "frame", "focus", "expression"?}`.
 
 ### build
 
@@ -419,7 +423,16 @@ kankuro build [--out GLB] [--animations A,B,...|all] [--render] [--size PX] [--s
 | `--size`, `--samples` | 512, 12 | for `--render` |
 
 The GLB has the body, eyes, hair and each garment as separate skinned meshes, one armature, PBR
-materials (garments get baked `baseColorTexture` and `normalTexture`) and the requested clips.
+materials (garments get baked `baseColorTexture` and `normalTexture`), the requested clips, and
+the 52 ARKit facial blendshapes as morph targets on the body.
+
+#### Facial expressions
+
+Every character is built with the 52 **ARKit blendshapes** (`jawOpen`, `eyeBlinkLeft`,
+`mouthSmileRight`, `browInnerUp`, ...) as named glTF morph targets, so face-tracking apps, Unity,
+Unreal Live Link and three.js can drive the face directly. `kankuro catalog expressions` lists the
+names. Preview them with `render --expression`. To leave them out (a smaller file), run
+`kankuro set face.blendshapes=none`.
 
 Prints a manifest, also saved as `build/manifest.json`:
 
@@ -480,7 +493,7 @@ and skin weights.
 Rig any humanoid mesh to the Mesh2Motion skeleton. It doesn't need a project.
 
 ```
-kankuro autorig <mesh> --out GLB [--facing auto|-y|+y] [--animations A,B] [--render DIR]
+kankuro autorig <mesh> --out GLB [--facing auto|-y|+y|-x|+x] [--animations A,B] [--render DIR]
                 [--method auto|heat|proximity]
 ```
 
@@ -488,7 +501,7 @@ kankuro autorig <mesh> --out GLB [--facing auto|-y|+y] [--animations A,B] [--ren
 |---|---|---|
 | `<mesh>` | | `.glb`, `.gltf`, `.obj` or `.fbx` |
 | `--out` | | output GLB |
-| `--facing` | `auto` | which way the model faces; `auto` detects it from the feet |
+| `--facing` | `auto` | which way the model faces (`-y`, `+y`, `-x`, `+x`); `auto` detects it from the feet |
 | `--animations` | | clips to bake in |
 | `--render` | | folder for check renders (front and side, at rest and posed) |
 | `--method` | `auto` | skinning: `heat` (bone heat), `proximity` (distance), `auto` tries heat first and falls back |
@@ -547,7 +560,8 @@ quickest thing for an agent to read first.
 | `custom_garment` | `template` on an imported garment | it keeps its own UVs |
 | `missing_file` | a file you passed, or one the spec refers to, doesn't exist | check the path |
 | `bad_format`, `no_mesh` | an imported mesh can't be read | use `.glb`, `.gltf`, `.obj` or `.fbx` with a mesh in it |
-| `bad_view`, `bad_focus`, `bad_section` | an option value isn't recognised | `hint` lists valid values |
+| `bad_view`, `bad_focus`, `bad_section`, `bad_expression` | an option value isn't recognised | `hint` lists valid values |
+| `no_blendshapes` | `render --expression` on a character built with `face.blendshapes=none` | `kankuro set face.blendshapes=arkit52` |
 | `autorig_failed` | the mesh isn't an upright humanoid with separate legs | read `message` |
 | `no_blender` | `bpy` can't be imported | install `bpy==5.2.*` on Python 3.13 (see [installation.md](installation.md)) |
 | `internal` | a bug | `error.traceback` and `build/blender.log`; please open an issue |

@@ -44,6 +44,7 @@ Keep renders cheap while iterating (`--size 384 --samples 8`) and raise them for
 | "a strong jaw, narrow nose" | `kankuro morphs --search jaw`, `--search nose`, then `set "body.morphs.<name>=<value>"` |
 | "a denim jacket" | `garment add jacket --fabric denim --color "#3b4f6b"` |
 | "a printed T-shirt" | `template tshirt`, have an image model paint it (see [codex-textures.md](codex-textures.md)), `garment set tshirt --texture <png>` |
+| "smiling" / "surprised" portrait | `render --focus head --expression smile` (presets or ARKit weights like `jawOpen=0.5`) |
 | "wearing a turban" | `garment add turban`, `hair set buzz` (other styles poke through) |
 | "traditional Indian dress" | `garment add blouse` + `garment add saree`, or `kurta` + `churidar` + `dupatta`, or `dhoti` + `turban` |
 

@@ -95,6 +95,7 @@ Open `renders/render_sheet.png`. It shows front, three-quarter, side and back. C
 ```bash
 kankuro render --focus head --views front,three_quarter    # face and hair
 kankuro render --animation Jog --frame 0.3                 # clothes mid-stride
+kankuro render --focus head --expression smile             # ARKit facial blendshapes
 ```
 
 Change things and render again until it looks right. Most iterations are a `set` or `garment set`

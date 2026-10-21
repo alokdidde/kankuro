@@ -27,6 +27,7 @@ that loads the project checks it, so a mistake shows up as a normal JSON error w
     "lips": true, "brows": true, "brow_color": "#2a1a12"
   },
   "eyes": {"iris_color": "#4a3020"},
+  "face": {"blendshapes": "arkit52"},
   "hair": {"style": "ponytail", "color": "#1e1410"},
   "garments": [
     {"id": "tanktop", "type": "tanktop", "color": "#f2efe8"},
@@ -50,6 +51,7 @@ that loads the project checks it, so a mistake shows up as a normal JSON error w
 | `body` | object | shape |
 | `skin` | object | skin material |
 | `eyes` | object | eye colour |
+| `face` | object | facial blendshapes |
 | `hair` | object or `null` | `null` is bald |
 | `garments` | array | clothes, in any order (layers decide stacking) |
 | `export` | object | build options |
@@ -79,6 +81,12 @@ that loads the project checks it, so a mistake shows up as a normal JSON error w
 | field | type | meaning |
 |---|---|---|
 | `iris_color` | hex or `null` | recolours the iris; `null` keeps the default brown eye texture |
+
+### `face`
+
+| field | type | default | meaning |
+|---|---|---|---|
+| `blendshapes` | `arkit52` or `none` | `arkit52` | export the 52 ARKit facial blendshapes as morph targets |
 
 ### `hair`
 
