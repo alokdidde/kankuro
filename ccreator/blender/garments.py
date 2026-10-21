@@ -278,6 +278,137 @@ def flat_sketch_uv(obj, margin=0.03):
     return {"scale_px_per_m": s, "front_center_u": 0.25, "back_center_u": 0.75}
 
 
+def _source_faces(gdef):
+    """Base-mesh faces a garment is cut from, and which part each belongs to (0 = main source group,
+    1 = the skirt helper that a "flare" hangs from the waist of a top)."""
+    groups = [gdef.get("source_group", "helper-tights")] + (["helper-skirt"] if "flare" in gdef else [])
+    faces, part = [], []
+    for k, g in enumerate(groups):
+        f, _ = morph.faces_of_group(g)
+        faces += f
+        part += [k] * len(f)
+    return faces, np.array(part)
+
+
+def _flare_heights(res, gdef):
+    """Seam height where a top joins its flared skirt, and the hem height (from body landmarks)."""
+    heads = {b.name: b.head_local for b in res.arm.data.bones}
+    z0, z1 = heads["pelvis"].z, heads["neck_01"].z
+    seam = z0 + gdef["regions"]["torso"][0] * (z1 - z0)
+    hip, knee = heads["thigh_l"].z, heads["calf_l"].z
+    hem = hip + gdef["flare"]["hem"] * (knee - hip)
+    return seam, hem
+
+
+def select_flare(res, gdef, verts, faces_local, part):
+    """Skirt-helper faces between the waist seam and the hem."""
+    seam, hem = _flare_heights(res, gdef)
+    co = res.coords[verts]
+    return [i for i, f in enumerate(faces_local) if part[i] == 1 and hem <= co[f, 2].mean() <= seam]
+
+
+def _loop_angles(loop, c):
+    co = np.array([v.co for v in loop])
+    return np.arctan2(co[:, 1] - c[1], co[:, 0] - c[0])
+
+
+def _bridge(bm, a, b):
+    """Join two closed boundary loops that ring the body with a strip of triangles, walking both
+    loops around the body axis together (the loops may have different vertex counts)."""
+    c = np.array([v.co for v in a + b]).mean(0)
+    loops = []
+    for lp in (a, b):
+        ang = _loop_angles(lp, c)
+        if np.sum(np.sin(np.diff(np.unwrap(ang)))) < 0:  # make both run counter-clockwise
+            lp, ang = lp[::-1], ang[::-1]
+        k = int(np.argmin(ang))
+        lp = lp[k:] + lp[:k]
+        ang = np.unwrap(np.roll(ang, -k))
+        ang = ang - ang[0] + np.arctan2(lp[0].co.y - c[1], lp[0].co.x - c[0])
+        loops.append((lp + [lp[0]], np.append(ang, ang[0] + 2 * np.pi)))
+    (la, aa), (lb, ab) = loops
+    i = j = 0
+    new = []
+    while i < len(la) - 1 or j < len(lb) - 1:
+        if j == len(lb) - 1 or (i < len(la) - 1 and aa[i + 1] <= ab[j + 1]):
+            tri = (la[i], la[i + 1], lb[j])
+            i += 1
+        else:
+            tri = (la[i], lb[j + 1], lb[j])
+            j += 1
+        if len(set(tri)) == 3:
+            new.append(bm.faces.new(tri))
+    return new
+
+
+def _join_flare(bm, seam):
+    """Bridge the top's waist hem to the top edge of its skirt so the garment is one surface."""
+    loops = [lp for lp in _boundary_loops(bm) if len(lp) > 8]
+    near = sorted(loops, key=lambda lp: abs(np.mean([v.co.z for v in lp]) - seam))[:2]
+    _bridge(bm, near[0], near[1])
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+    # relax the joint so the waist flows into the skirt
+    ring = {v for lp in near for v in lp}
+    for _ in range(2):
+        ring |= {e.other_vert(v) for v in list(ring) for e in v.link_edges}
+    for _ in range(6):
+        new = {v: sum((e.other_vert(v).co for e in v.link_edges), Vector()) / len(v.link_edges) for v in ring}
+        for v, c in new.items():
+            v.co = v.co * 0.5 + c * 0.5
+
+
+def _cut_slits(bm, depth, opening):
+    """Side slits rising `depth` metres from the lowest hem: split the mesh along the side seam and
+    open the slit into a narrow V so it reads in the rest pose."""
+    loops = _boundary_loops(bm)
+    hem = min(loops, key=lambda lp: np.mean([v.co.z for v in lp]))
+    z0 = np.mean([v.co.z for v in hem])
+    for side in (-1, 1):
+        v = max(hem, key=lambda x: side * x.co.x)
+        chain, verts = [], [v]
+        while v.co.z < z0 + depth:
+            up = [e for e in v.link_edges if e.other_vert(v).co.z > v.co.z + 1e-4]
+            if not up:
+                break
+            e = max(up, key=lambda e: (e.other_vert(v).co - v.co).normalized().z)
+            chain.append(e)
+            v = e.other_vert(v)
+            verts.append(v)
+        if not chain:
+            continue
+        pos = [x.co.copy() for x in verts]
+        bmesh.ops.split_edges(bm, edges=chain)
+        for x in bm.verts:
+            for p in pos[:-1]:
+                if (x.co - p).length < 1e-6:
+                    fy = np.mean([f.calc_center_median().y for f in x.link_faces])
+                    s = 1 - (x.co.z - z0) / depth
+                    x.co.y += (-1 if fy < x.co.y else 1) * opening * max(s, 0) ** 1.5
+                    break
+
+
+def _gathers(obj, res, g):
+    """Churidar gathers: rings of soft bunched folds over the lower leg (wavy, outward only)."""
+    heads = {b.name: b.head_local for b in res.arm.data.bones}
+    zk, za = heads["calf_l"].z, heads["foot_l"].z
+    obj.data.update()
+    n = np.empty(len(obj.data.vertices) * 3)
+    obj.data.vertices.foreach_get("normal", n)
+    n = n.reshape(-1, 3)
+    co = util.get_coords(obj)
+    t = (zk - co[:, 2]) / (zk - za)  # 0 at the knee, 1 at the ankle
+    w = np.clip((t - g["from"]) / 0.15, 0, 1)
+    side = np.sign(co[:, 0])
+    cx = np.array([heads["calf_l" if s > 0 else "calf_r"].x for s in side])
+    ang = np.arctan2(co[:, 1], co[:, 0] - cx)
+    # folds that wander, merge and fade around the leg rather than regular rings
+    z = co[:, 2] / g["wavelength"]
+    ph = z + 0.45 * np.sin(ang + 2.3 * z + side) + 0.25 * np.sin(3 * ang - 1.7 * z)
+    am = 0.65 + 0.35 * np.sin(2 * ang + 0.9 * z + 2 * side)
+    bump = g["extra"] + g["amp"] * am * np.abs(np.sin(np.pi * ph)) ** 0.7
+    util.set_coords(obj, co + n * (w * bump)[:, None])
+
+
 def _shape(res, gdef, gid, verts, faces_local, keep):
     """Garment surface for one body: cut, clean, subdivide, smooth hems. Same topology for any body."""
     obj = util.make_mesh(gid, res.coords[verts], [faces_local[i].tolist() for i in keep])
@@ -286,10 +417,12 @@ def _shape(res, gdef, gid, verts, faces_local, keep):
     bm.from_mesh(obj.data)
     bmesh.ops.delete(bm, geom=[v for v in bm.verts if not v.link_faces], context="VERTS")
     _largest_components(bm)
+    if "flare" in gdef:
+        _join_flare(bm, _flare_heights(res, gdef)[0])
     bm.to_mesh(obj.data)
     bm.free()
     sub = obj.modifiers.new("sub", "SUBSURF")
-    sub.levels = 1
+    sub.levels = gdef.get("subdiv", 1)
     apply_modifier(obj, sub)
     bm = bmesh.new()
     bm.from_mesh(obj.data)
@@ -298,6 +431,8 @@ def _shape(res, gdef, gid, verts, faces_local, keep):
         _smooth_loops(bm)
         heads = {b.name: b.head_local for b in res.arm.data.bones}
         _level_hems(bm, heads["pelvis"].z, heads["neck_01"].z)
+    if gdef.get("flare", {}).get("slits"):
+        _cut_slits(bm, gdef["flare"]["slits"], 0.012)
     bm.to_mesh(obj.data)
     bm.free()
     if gdef.get("sole"):
@@ -392,14 +527,18 @@ def make(res, ref_res, body_obj, gid, gtype, layer_rank=0, worn=None):
         obj, uvinfo = headwear.turban(res, body_obj, gid, gdef)
         obj["garment_type"] = gtype
         return obj, uvinfo
-    group = gdef.get("source_group", "helper-tights")
-    faces, _ = morph.faces_of_group(group)
+    if gdef.get("drape") == "dupatta":
+        from . import dupatta
+        return dupatta.make(res, body_obj, gid, gdef, layer_rank, worn)
+    faces, part = _source_faces(gdef)
     verts = np.unique(np.concatenate([np.asarray(f) for f in faces]))
     remap = -np.ones(len(res.coords), dtype=np.int64)
     remap[verts] = np.arange(len(verts))
     faces_local = [remap[np.asarray(f)] for f in faces]
     if gtype not in _UV_CACHE:
         keep = select_faces(ref_res, gdef, verts, faces_local)
+        if "flare" in gdef:
+            keep = [i for i in keep if part[i] == 0] + select_flare(ref_res, gdef, verts, faces_local, part)
         ref = _shape(ref_res, gdef, "_ref_" + gid, verts, faces_local, keep)
         uvinfo = flat_sketch_uv(ref)
         uv = np.empty(len(ref.data.loops) * 2)
@@ -418,6 +557,8 @@ def make(res, ref_res, body_obj, gid, gtype, layer_rank=0, worn=None):
         loosen_legs(obj, res, gdef["loose"])
     if worn is not None:
         conform_over(obj, bvh, worn, 0.006)
+    if "gathers" in gdef:
+        _gathers(obj, res, gdef["gathers"])
     if gdef.get("sole"):
         co = util.get_coords(obj)
         co[:, 2] = np.maximum(co[:, 2], 0.0)

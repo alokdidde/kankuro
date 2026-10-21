@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "name": "meera",
+  "body": {
+    "preset": "female",
+    "macros": {
+      "gender": 0.0,
+      "breast_size": 0.3,
+      "age": 0.3,
+      "weight": 0.45,
+      "muscle": 0.4,
+      "caucasian": 0.5,
+      "asian": 0.3,
+      "african": 0.2
+    },
+    "morphs": {},
+    "height_cm": 152
+  },
+  "skin": {
+    "color": "#9c6644",
+    "texture": null,
+    "roughness": 0.6,
+    "lips": true,
+    "brows": true,
+    "brow_color": null
+  },
+  "eyes": {
+    "iris_color": "#2e1c10"
+  },
+  "hair": {
+    "style": "ponytail",
+    "color": "#120c09"
+  },
+  "garments": [
+    {
+      "id": "churidar",
+      "type": "churidar",
+      "color": "#f1e6c8"
+    },
+    {
+      "id": "kurta",
+      "type": "kurta",
+      "color": "#a3214f"
+    },
+    {
+      "id": "dupatta",
+      "type": "dupatta",
+      "color": "#e9b23c"
+    }
+  ],
+  "export": {
+    "animations": [],
+    "hide_body_under_clothes": true,
+    "texture_size": 2048
+  }
+}

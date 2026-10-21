@@ -21,6 +21,12 @@ HAIR_STYLES = {
 #   regions: bone -> [t_min, t_max] along the bone (0 = head, 1 = tail); "*" means both sides (_l/_r)
 #   neckline: round opening around the neck base (radius, drop below it at front/back), in metres
 #   offset: distance from the skin; layer: stacking order (higher sits outside lower layers)
+#   flare: a skirt (MakeHuman skirt helper) sewn to the top's waist hem, down to `hem` (0 = hip joint,
+#          1 = knee), with side `slits` rising that many metres from the hem
+#   drape "dupatta": a scarf laid along a path over the body, not cut from a helper (`width` of the cloth,
+#          `drop` = low point of the front U from mid-back (0) to the neck (1), `end` = hanging ends
+#          from the hip joint (0) to the knee (1))
+#   gathers: bunched rings of cloth over the lower leg, from `from` (0 = knee, 1 = ankle)
 GARMENTS = {
     "tshirt": {
         "fabric": "cotton", "desc": "Short-sleeve crew-neck T-shirt", "slot": "top", "layer": 1, "offset": 0.006,
@@ -86,5 +92,22 @@ GARMENTS = {
         # cloth swells out; crown: extra height; band/rise/depth: wrap width, climb to the front, ridge height
         "turban": {"line": [0.6, 0.5, 0.2], "bulk": 0.03, "crown": 0.045, "band": 0.03, "rise": 0.07,
                    "depth": 0.009},
+    },
+    "kurta": {
+        "fabric": "cotton", "desc": "Knee-length tunic with 3/4 sleeves, fitted to the waist then flared, side slits",
+        "slot": "top", "layer": 2, "offset": 0.006, "weight_smooth": 16,
+        "regions": {"torso": [0.1, 1], "clavicle_*": [0, 1], "upperarm_*": [0, 1], "lowerarm_*": [0, 0.6]},
+        "neckline": {"radius": 0.085, "front": 0.12, "back": 0.04},
+        "flare": {"hem": 1.12, "slits": 0.2},
+    },
+    "churidar": {
+        "fabric": "cotton", "desc": "Fitted ankle-length trousers bunched into gathers over the lower leg",
+        "slot": "bottom", "layer": 0, "offset": 0.003, "subdiv": 2,
+        "regions": {"torso": [0, 0.04], "thigh_*": [0, 1], "calf_*": [0, 0.97]},
+        "gathers": {"from": 0.35, "amp": 0.010, "wavelength": 0.03, "extra": 0.003},
+    },
+    "dupatta": {
+        "fabric": "silk", "desc": "Long scarf worn with a churidar: a U across the chest, over both shoulders, ends down the back",
+        "slot": "shawl", "layer": 4, "offset": 0.004, "drape": "dupatta", "width": 0.22, "drop": 0.15, "end": 0.45,
     },
 }
