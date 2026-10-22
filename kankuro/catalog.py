@@ -10,7 +10,7 @@
 #         down), "back" (pulled back to the ponytail/bun/braid, or the nape; with `part`, combed sideways
 #         off a front parting first), "braid" (into a French braid along the top of the head)
 #   part: x of a parting line (cut into the scalp layer); hairline: (front, side, back) heights as
-#         fractions of neck..crown; temple: how far the hairline recedes at the temples
+#         fractions of skull base..crown (back is the nape, negative = below the skull); temple: how far the hairline recedes at the temples
 #   braid_width / braid_length / braid_period: plait half-width, hanging length and weave period (m)
 #   card_len / card_width: typical card size; card_lift: how far cards stack above the base;
 #   card_density: layers of cover; curl: strand wave amplitude (radians); cards: False = base layer only
@@ -32,7 +32,7 @@ HAIR_STYLES = {
             "flow": "back", "part": 0.0, "card_len": 0.10, "card_width": 0.016, "card_lift": 0.004, "card_density": 5.0},
     "indian_braid": {"desc": "Centre parting, pulled back into one long plait down the back", "offset": 0.006,
                      "thickness": 0.006, "length": 0.0, "extras": ["braid"], "flow": "back", "part": 0.0,
-                     "hairline": (0.74, 0.55, 0.14), "braid_width": 0.015, "braid_length": 0.42,
+                     "hairline": (0.74, 0.55, -0.32), "braid_width": 0.015, "braid_length": 0.42,
                      "braid_period": 0.05, "card_len": 0.12, "card_width": 0.016, "card_lift": 0.004,
                      "card_density": 5.0},
     "french_braid": {"desc": "French braid woven from the forehead down the back of the head, then hanging",

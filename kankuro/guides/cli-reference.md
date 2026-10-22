@@ -484,7 +484,8 @@ hair its volume (slightly darker, so gaps read as depth), and `Hair`, the **card
 an RGBA strand texture, grown along the style's combing direction (out from the crown, away from a
 parting, back to the ponytail/bun, or into the braid) in overlapping layers. Braids are three woven
 strands, each with its own short cards running along it. The hairline is shaped like a real one (a
-slight centre dip, receding temples, down in front of the ear), parted styles have an actual parting
+slight centre dip, receding temples, down in front of the ear, close round the back of the ear and down
+to the nape of the neck), parted styles have an actual parting
 line of scalp, and the scalp under the hair is tinted so the hair seems to grow out of the skin. Cards shade with the normals of the hair
 volume, use an anisotropic highlight, and export as glTF `alphaMode: MASK` (no sorting problems in
 game engines). `buzz` has no cards (fine stubble texture on the base layer).
@@ -847,7 +848,7 @@ kankuro render [--views V1,V2,...] [--focus full|upper|head]
 
 | option | default | meaning |
 |---|---|---|
-| `--views` | `front,three_quarter,side,back` | any of those four, comma-separated |
+| `--views` | `front,three_quarter,side,back` | any of those four or `back_three_quarter` (behind the ear), comma-separated |
 | `--focus` | `full` | `upper` frames the top half; `head` is a face and hair close-up |
 | `--animation` | | pose the character from a Mesh2Motion clip (see [animations](#animations)) |
 | `--frame` | 0.25 | with `--animation`: 0..1 is a fraction of the clip, above 1 is a frame number |
