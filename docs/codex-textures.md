@@ -110,7 +110,7 @@ kankuro render --focus upper --views front,three_quarter,back
 kankuro build
 ```
 
-`--fabric` chooses the built-in micro-relief that goes under your maps: `cotton`, `denim`, `knit`,
+`--fabric` chooses the built-in micro-relief that goes under your maps: `cotton` (woven), `jersey`, `denim`, `knit`,
 `canvas`, `leather`, `silk`, `spandex`, or `none` to use only your maps. When the Codex height map
 already has the weave in it, `--fabric silk` (smooth, keeps stitching and folds) or `none` avoids
 doubling it.

@@ -59,20 +59,28 @@ HAIR_STYLES = {
 #   drape "dupatta": a scarf laid along a path over the body, not cut from a helper (`width` of the cloth,
 #          `drop` = low point of the front U from mid-back (0) to the neck (1), `end` = hanging ends
 #          from the hip joint (0) to the knee (1))
+#   a_line: a skirt flares out by this many metres at the hem, leaving room for the legs on a stride
+#   hang: a loose tunic falls straight down from the chest with this much ease (m) instead of following the waist
+#   collar: band collar standing up from the neckline (height, lean in towards the neck)
+#   placket: buttoned front opening drawn into the fabric relief (length, width in m, button count)
+#   pleat_panel: dhoti front pleats, a strip hanging from the front of the waist between the legs (x range, fold
+#          count/depth, flare at the hem, hem_up = how far its hem is above the legs' hem)
+#   waist_roll / tuck: a rolled waistband (height, bulge) / the kachha gathered in at the centre back
 #   gathers: bunched rings of cloth over the lower leg, from `from` (0 = knee, 1 = ankle)
+#   border: width (m) of the "border"/"hem" material regions along the open edges (default 0.025)
 GARMENTS = {
     "tshirt": {
-        "fabric": "cotton", "desc": "Short-sleeve crew-neck T-shirt", "slot": "top", "layer": 1, "offset": 0.006,
+        "fabric": "jersey", "desc": "Short-sleeve crew-neck T-shirt", "slot": "top", "layer": 1, "offset": 0.006,
         "regions": {"torso": [0.1, 1], "clavicle_*": [0, 1], "upperarm_*": [0, 0.45]},
         "neckline": {"radius": 0.085, "front": 0.11, "back": 0.04},
     },
     "longsleeve": {
-        "fabric": "cotton", "desc": "Long-sleeve crew-neck top", "slot": "top", "layer": 1, "offset": 0.006,
+        "fabric": "jersey", "desc": "Long-sleeve crew-neck top", "slot": "top", "layer": 1, "offset": 0.006,
         "regions": {"torso": [0.1, 1], "clavicle_*": [0, 1], "upperarm_*": [0, 1], "lowerarm_*": [0, 0.92]},
         "neckline": {"radius": 0.085, "front": 0.11, "back": 0.04},
     },
     "tanktop": {
-        "fabric": "cotton", "desc": "Sleeveless tank top", "slot": "top", "layer": 1, "offset": 0.005,
+        "fabric": "jersey", "desc": "Sleeveless tank top", "slot": "top", "layer": 1, "offset": 0.005,
         "regions": {"torso": [0.1, 0.93]},
     },
     "jacket": {
@@ -99,6 +107,7 @@ GARMENTS = {
     "long_skirt": {
         "fabric": "silk", "desc": "Ankle-length skirt (MakeHuman skirt helper)", "slot": "bottom", "layer": 2, "offset": 0.004,
         "source_group": "helper-skirt", "length": 1.0,
+        "a_line": 0.04,
     },
     "blouse": {
         "fabric": "silk", "desc": "Cropped sari blouse (choli): short sleeves, scoop neck, ends under the bust",
@@ -107,12 +116,16 @@ GARMENTS = {
         "neckline": {"radius": 0.085, "front": 0.14, "back": 0.09},
     },
     "saree": {
+        "border": 0.07,
         "fabric": "silk", "desc": "Saree in the Nivi drape: floor-length skirt with front pleats and the pallu over "
                                   "the left shoulder, hanging down the back (wear over a blouse)",
         "slot": "bottom", "layer": 3, "offset": 0.004, "source_group": "helper-skirt", "length": 1.0,
         # hem: height above the floor; pleats: front panel x range, fold count/depth, flare at the hem;
         # pallu: how far its end hangs below the waist at the back, gap over what it lies on
-        "drape": "saree", "subdiv": 2, "hem": 0.025, "weight_smooth": 30,
+        "drape": "saree", "subdiv": 2, "hem": 0.025, "weight_smooth": 30, "a_line": 0.05,
+        # the saree's skirt is a smooth tube that projects cleanly; its template layout (hem border, pallu
+        # band) is what saree textures are painted against, so it keeps the plain projection
+        "unsquash_uv": False,
         "pleats": {"x": [-0.075, 0.085], "folds": 7, "depth": 0.014, "flare": 0.03},
         "pallu": {"drop": 0.45, "gap": 0.007},
     },
@@ -130,8 +143,12 @@ GARMENTS = {
                     "middle_*": [0, 1], "ring_*": [0, 1], "pinky_*": [0, 1]},
     },
     "dhoti": {
-        "fabric": "canvas", "desc": "Draped dhoti: loose woven-cotton legs from the waist to mid-calf",
+        "border": 0.045,
+        "fabric": "cotton", "desc": "Draped dhoti: loose woven-cotton legs from the waist to mid-calf, a pleated "
+                                    "front panel hanging between the legs, rolled waist, kachha tuck at the back",
         "slot": "bottom", "layer": 2, "offset": 0.008, "loose": 0.06,
+        "pleat_panel": {"x": [-0.075, 0.075], "folds": 6, "depth": 0.009, "flare": 0.03, "hem_up": 0.04},
+        "waist_roll": {"height": 0.045, "bulge": 0.007}, "tuck": {"depth": 0.025, "width": 0.06, "length": 0.3},
         "regions": {"torso": [0, 0.17], "thigh_*": [0, 1], "calf_*": [0, 0.7]},
     },
     "turban": {
@@ -143,11 +160,15 @@ GARMENTS = {
                    "depth": 0.009},
     },
     "kurta": {
-        "fabric": "cotton", "desc": "Knee-length tunic with 3/4 sleeves, fitted to the waist then flared, side slits",
-        "slot": "top", "layer": 2, "offset": 0.006, "weight_smooth": 16,
+        "border": 0.015,
+        "fabric": "cotton", "desc": "Loose knee-length tunic worn over a dhoti or churidar: band collar, buttoned "
+                                    "front placket, 3/4 sleeves, side slits from the hip down",
+        "slot": "top", "layer": 3, "offset": 0.008, "weight_smooth": 16, "hang": 0.025,
         "regions": {"torso": [0.1, 1], "clavicle_*": [0, 1], "upperarm_*": [0, 1], "lowerarm_*": [0, 0.6]},
-        "neckline": {"radius": 0.085, "front": 0.12, "back": 0.04},
-        "flare": {"hem": 1.12, "slits": 0.2},
+        "neckline": {"radius": 0.075, "front": 0.075, "back": 0.035},
+        "collar": {"height": 0.03, "lean": 0.12},
+        "placket": {"length": 0.17, "width": 0.032, "buttons": 3},
+        "flare": {"hem": 1.12, "slits": 0.36},
     },
     "churidar": {
         "fabric": "cotton", "desc": "Fitted ankle-length trousers bunched into gathers over the lower leg",
@@ -160,3 +181,68 @@ GARMENTS = {
         "slot": "shawl", "layer": 4, "offset": 0.004, "drape": "dupatta", "width": 0.22, "drop": 0.15, "end": 0.45,
     },
 }
+
+
+def m2m_bones():
+    """The 66 Mesh2Motion bone names (with root), in file order. bpy-free."""
+    import json
+    import os
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "m2m_rig.json")
+    with open(path) as f:
+        return [b["name"] for b in json.load(f)["bones"]]
+
+
+# Accessories: rigid pieces on one bone (blender/accessories.py). Built-ins are made on the reference body
+# so agents can try the command without a mesh; your own are modelled on `kankuro reference-body`.
+#   fit: none (rigid; slides along the bone until clear of the body) | wrap (radial scale to hug a limb) |
+#        chest / neck (the lower part settles onto the chest) | pierce (rigid and left exactly where it is,
+#        through the body: earrings, nose rings); hang: extra bones for a dangling part
+ACCESSORIES = {
+    "circlet": {"desc": "Plain gold band around the head at the forehead, with a small front ornament",
+                "bone": "head", "fit": "none", "material": "gold"},
+    "ring_earring_l": {"desc": "Small hoop earring through the left earlobe", "bone": "head", "fit": "pierce",
+                       "hang": 1, "material": "gold"},
+    "ring_earring_r": {"desc": "Small hoop earring through the right earlobe", "bone": "head", "fit": "pierce",
+                       "hang": 1, "material": "gold"},
+    "bangle_l": {"desc": "Bangle on the left wrist", "bone": "lowerarm_l", "fit": "wrap", "material": "gold"},
+    "bangle_r": {"desc": "Bangle on the right wrist", "bone": "lowerarm_r", "fit": "wrap", "material": "gold"},
+}
+ACCESSORY_FITS = ("none", "wrap", "chest", "neck", "pierce")
+
+# Props: held in the hand through a socket bone (prop_l / prop_r under hand_l / hand_r). Built-in test props
+# are cylinders laid across the palm: radius/length in metres, `along` = how far the prop runs past the
+# grip towards the index finger (the rest runs towards the little finger), `tilt` = degrees the index end
+# leans towards the fingertips (negative: towards the wrist, so a long staff points down a hanging arm),
+# `reach` = where the second hand holds a two-hand prop, metres from the grip towards the index finger
+# (negative: towards the little finger; default -0.3);
+# `hold` = where the anchor hand's wrist brings a two-hand prop, metres from `hold_bone`'s head (x is
+# mirrored for a left anchor). Default: in front of the chest, from spine_03.
+PROPS = {
+    "handle": {"desc": "Plain cylinder handle, 3 cm across (a tool grip, a bucket handle)", "radius": 0.015,
+               "length": 0.14, "along": 0.5, "tilt": 15, "grip": "power", "hand": "r", "material": "iron_dark"},
+    "staff": {"desc": "Walking staff (lathi), 4 cm across and 1.3 m long", "radius": 0.02, "length": 1.3, "along": 0.37, "tilt": -40,
+              "grip": "staff", "hand": "r", "color": "#6b4a2b"},
+    "flute": {"desc": "Bansuri flute, 2.5 cm across and 0.55 m long, held in both hands", "radius": 0.0125,
+              "length": 0.55, "along": 0.35, "tilt": 0, "grip": "flute", "hand": "both", "anchor": "r", "reach": -0.12,
+              "hold_bone": "head", "hold": [-0.22, -0.2, -0.12],
+              "color": "#b98c4f"},
+}
+
+# Grips: finger poses for holding props. "contact" curls each finger joint until it touches the prop
+# (limited to `max` degrees per joint: knuckle, middle, tip); a list of degrees is a fixed pose.
+GRIPS = {
+    "power": {"desc": "Full wrap round a handle, thumb over the fingers", "fingers": "contact", "thumb": "contact",
+              "max": [90, 100, 80]},
+    "staff": {"desc": "Like power, for a long pole", "fingers": "contact", "thumb": "contact", "max": [90, 100, 80]},
+    "hook": {"desc": "Fingers hooked round a handle, thumb free (carrying a bucket or a bag)",
+             "fingers": "contact", "thumb": [10, 5, 0], "max": [25, 100, 80]},
+    "pinch": {"desc": "Thumb and index pinch, other fingers loosely curled", "fingers": "contact",
+              "thumb": "contact", "max": [70, 80, 60], "only": ["index"], "rest": [30, 45, 30]},
+    "flute": {"desc": "Fingers laid over a flute's holes, thumb under it", "fingers": "contact", "thumb": "contact",
+              "max": [30, 35, 25]},
+    "open": {"desc": "Flat, relaxed open hand", "fingers": [5, 5, 5], "thumb": [0, 0, 0]},
+    "fist": {"desc": "Closed fist", "fingers": [80, 95, 70], "thumb": [30, 40, 40]},
+    "point": {"desc": "Index finger pointing, the rest in a fist", "fingers": [80, 95, 70], "thumb": [30, 40, 40],
+              "index": [0, 0, 0]},
+}
+FINGERS = ("index", "middle", "ring", "pinky")

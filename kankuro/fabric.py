@@ -16,7 +16,10 @@ from .blender_free import hex_rgb
 # (cloth scatters light at grazing angles instead of a plastic-like specular highlight); crease: strength
 # of compression wrinkles at elbows/knees/waist; heather: fibre colour variation; weft: denim white weft
 FABRICS = {
-    "cotton": {"desc": "Jersey knit T-shirt cotton", "kind": "jersey", "period_mm": 3.5, "amp": 0.5, "rough": 0.92,
+    "cotton": {"desc": "Woven cotton (plain weave: kurta, dhoti, saree, shirting)", "kind": "plain",
+               "period_mm": 2.5, "amp": 0.35, "rough": 0.9, "fold": 0.4, "stitch": True, "sheen": 0.45,
+               "sheen_rough": 0.5, "spec": 0.25, "crease": 1.0, "heather": 0.05},
+    "jersey": {"desc": "Jersey knit T-shirt cotton", "kind": "jersey", "period_mm": 3.5, "amp": 0.5, "rough": 0.92,
                "fold": 0.35, "stitch": True, "sheen": 0.6, "sheen_rough": 0.5, "spec": 0.25, "crease": 1.0,
                "heather": 0.06},
     "denim": {"desc": "Twill denim with diagonal weave", "kind": "twill", "period_mm": 5.0, "amp": 0.8, "rough": 0.9,
@@ -107,8 +110,21 @@ def _edge_distance(mask, max_px):
     return d
 
 
-def stitching(mask, px_per_mm):
-    """Hem fold + a dashed stitch line just inside every outline (hems, cuffs, neckline, side seams)."""
+def seam_band(segments, size, px_per_mm, width_mm=16):
+    """Mask of a band around UV line segments (the panel edges that are sewn to each other)."""
+    from PIL import ImageDraw
+    m = Image.new("L", (size, size), 0)
+    d = ImageDraw.Draw(m)
+    w = max(1, int(round(2 * width_mm * px_per_mm)))
+    for (u0, v0), (u1, v1) in segments:
+        d.line([(u0 * size, (1 - v0) * size), (u1 * size, (1 - v1) * size)], fill=255, width=w)
+    return np.asarray(m) > 127
+
+
+def stitching(mask, px_per_mm, seams=None):
+    """Hem fold + a dashed stitch line just inside every outline (hems, cuffs, neckline). `seams`
+    (a mask from seam_band) marks outline where two panels are sewn together: a straight projection
+    cuts those along the mesh's edges, so stitching drawn there would zigzag."""
     max_px = int(14 * px_per_mm) + 2
     d = _edge_distance(mask, max_px) / px_per_mm  # mm from edge
     h = np.zeros(mask.shape, np.float32)
@@ -121,7 +137,35 @@ def stitching(mask, px_per_mm):
     line = np.clip(1 - np.abs(d - 6) / 0.6, 0, 1)
     h += line * dash * 0.35
     h[~mask] = 0
+    if seams is not None:
+        h[seams] = 0
     return h
+
+
+def placket(size, px_per_mm, uv_per_m, u, v, length=0.16, width=0.03, buttons=3, **_):
+    """Height field of a button placket running down from (u, v) (the front-centre neck point in UV):
+    a raised double-stitched band with domed buttons. Returns (height, button mask)."""
+    y, x = np.mgrid[0:size, 0:size].astype(np.float32)
+    x0, y0 = u * size, (1 - v) * size
+    L, W = length * uv_per_m * size, width * uv_per_m * size
+    dx, dy = np.abs(x - x0), y - y0
+    inside = (dx < W / 2) & (dy > -2) & (dy < L)
+    h = np.zeros((size, size), np.float32)
+    h[inside] += 0.25
+    # bottom end of the band and the stitch lines 2.5 mm inside its edges
+    edge = np.clip(1 - np.abs(dx - (W / 2 - 2.5 * px_per_mm)) / (0.6 * px_per_mm), 0, 1)
+    dash = (np.sin(dy * (np.pi / (3.0 * px_per_mm))) > 0).astype(np.float32)
+    h += edge * dash * 0.3 * ((dy > 0) & (dy < L))
+    h -= np.clip(1 - np.abs(dx - W / 2) / (0.8 * px_per_mm), 0, 1) * 0.3 * ((dy > -2) & (dy < L))
+    btn = np.zeros((size, size), bool)
+    rad = 4.5 * px_per_mm
+    for k in range(buttons):
+        cy = y0 + L * (k + 0.6) / (buttons + 0.3)
+        d = np.hypot(x - x0, y - cy) / max(rad, 1)
+        dome = np.clip(1 - d * d, 0, 1)
+        h += 1.4 * np.sqrt(dome)
+        btn |= d < 1
+    return h, btn
 
 
 def folds(size, px_per_mm, rng, amount):
@@ -245,13 +289,21 @@ def creases(chain_s, weight, size, px_per_mm, rng, amount):
 
 
 def bake(out_prefix, size, uv_per_m, mask=None, color="#8a8f99", albedo_path=None, fabric="cotton",
-         height_path=None, normal_path=None, strength=1.0, seed=1, ao=None, chain_s=None, crease_w=None, detail=None):
+         height_path=None, normal_path=None, strength=1.0, seed=1, ao=None, chain_s=None, crease_w=None, detail=None,
+         seams=None, placket_spec=None, finish=None, roughness=None, regions=()):
     """Write <prefix>_albedo.jpg and <prefix>_normal.jpg (JPEG keeps the GLB small).
 
     ao: (size, size) ambient occlusion baked from the dressed character (1 = open), multiplied into the
     albedo so folds, collars and layer overlaps keep their depth in viewers without AO.
     chain_s/crease_w: maps from clothshade for compression wrinkles at joints.
     detail: 0..1 map fading procedural detail where the UVs are squeezed (it would smear into streaks).
+    seams: UV segments where panels are sewn together (no hem stitching drawn along them).
+    placket_spec: {u, v, length, width, buttons} for a buttoned front placket (kurta).
+    finish: a resolved matlib preset for the whole garment (metal armour, lacquered leather): its
+    metallic/roughness replace the fabric's, and its colour is the base colour unless a texture is given.
+    regions: [(mask, preset)] areas of the template (0..1 float masks) in another material, e.g. a gold
+    zari border: tinted with the preset's colour, keeping the cloth's weave relief, folds and occlusion,
+    and written into a metallic-roughness map (<prefix>_mr.png: G = roughness, B = metallic).
     Returns (albedo, normal, material) where material holds roughness/sheen/specular for the shader."""
     rng = np.random.default_rng(seed)
     px_per_mm = size * uv_per_m / 1000.0
@@ -262,10 +314,14 @@ def bake(out_prefix, size, uv_per_m, mask=None, color="#8a8f99", albedo_path=Non
         h += f["amp"] * weave(f["kind"], size, px_per_mm, f["period_mm"], rng)
         h += folds(size, px_per_mm, rng, f["fold"])
         if f["stitch"] and mask is not None:
-            h += stitching(mask, px_per_mm)
+            h += stitching(mask, px_per_mm, seam_band(seams, size, px_per_mm) if seams else None)
         if chain_s is not None and crease_w is not None:
             h += creases(chain_s, crease_w, size, px_per_mm, rng, f["crease"])
         h *= keep
+    btn = None
+    if placket_spec:
+        hp, btn = placket(size, px_per_mm, uv_per_m, **placket_spec)
+        h += hp
     if height_path:
         h += 3.0 * _load(height_path, size, "L")
     # normal strength in "height units per pixel": scale so 1 mm of relief reads clearly
@@ -277,7 +333,9 @@ def bake(out_prefix, size, uv_per_m, mask=None, color="#8a8f99", albedo_path=Non
     if albedo_path:
         alb = _load(albedo_path, size, "RGB")
     else:
-        alb = np.ones((size, size, 3), np.float32) * np.array(hex_rgb(color), np.float32)
+        alb = np.ones((size, size, 3), np.float32) * np.array(hex_rgb(finish["color"] if finish else color),
+                                                             np.float32)
+    alb0 = alb.copy()
     if f:
         # real cloth is never one flat colour: dye mottling, fibre heathering and (denim) white weft
         alb = alb * (1 + 0.03 * (_noise((size, size), 45 * px_per_mm, rng) * keep)[..., None])
@@ -287,6 +345,8 @@ def bake(out_prefix, size, uv_per_m, mask=None, color="#8a8f99", albedo_path=Non
         if f.get("weft"):
             wv = weave(f["kind"], size, px_per_mm, f["period_mm"], rng)
             alb = alb + f["weft"] * ((wv - 0.5) * keep)[..., None] * (0.9 - alb)
+    if btn is not None and btn.any():  # buttons: horn/shell, a little darker than the cloth
+        alb[btn] = alb[btn] * 0.78
     # cavity: darken grooves so creases and stitching also show without normal mapping
     if f or height_path:
         hl = h - _box(_box(h, 6, 0), 6, 1)  # local relief only
@@ -296,11 +356,30 @@ def bake(out_prefix, size, uv_per_m, mask=None, color="#8a8f99", albedo_path=Non
         # squeezed UV strips can't hold occlusion detail either (it shows as blocks): fade it there too
         ao = 1 - (1 - np.clip(ao, 0, 1)) * keep
         alb = alb * (0.5 + 0.5 * ao)[..., None]
+    rough0 = finish["roughness"] if finish else (roughness if roughness is not None else (f["rough"] if f else 0.8))
+    metal0 = finish["metallic"] if finish else 0.0
+    mr_path = None
+    if regions:
+        # the shading baked into the albedo (AO, cavities, heathering) as a factor of the plain colour,
+        # carried over onto the region's colour
+        shade = (alb / np.maximum(alb0, 0.02)).mean(-1, keepdims=True)
+        R = np.full((size, size), rough0, np.float32)
+        M = np.full((size, size), metal0, np.float32)
+        for rmask, rp in regions:
+            w = rmask.astype(np.float32)[..., None]
+            alb = alb * (1 - w) + np.array(hex_rgb(rp["color"]), np.float32) * shade * w
+            R = R * (1 - w[..., 0]) + rp["roughness"] * w[..., 0]
+            M = M * (1 - w[..., 0]) + rp["metallic"] * w[..., 0]
+        mr = np.zeros((size, size, 3), np.float32)
+        mr[..., 1], mr[..., 2] = R, M
+        mr_path = out_prefix + "_mr.png"
+        Image.fromarray((np.clip(mr, 0, 1) * 255).astype(np.uint8)).save(mr_path)
     a_path = out_prefix + "_albedo.jpg"
     n_path = out_prefix + "_normal.jpg"
     Image.fromarray((np.clip(alb, 0, 1) * 255).astype(np.uint8)).save(a_path, quality=92)
     Image.fromarray(((n * 0.5 + 0.5) * 255).clip(0, 255).astype(np.uint8)).save(n_path, quality=94)
-    mat = {"roughness": f["rough"] if f else 0.8, "sheen": f["sheen"] if f else 0.3,
+    mat = {"roughness": rough0, "metallic": metal0, "mr": mr_path,
+           "sheen": 0.0 if finish and finish["metallic"] > 0.5 else (f["sheen"] if f else 0.3),
            "sheen_roughness": f["sheen_rough"] if f else 0.5, "specular": f["spec"] if f else 0.3}
     m = mask if mask is not None else np.ones((size, size), bool)
     mean = alb[m].mean(0) if m.any() else np.full(3, 0.5)

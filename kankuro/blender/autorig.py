@@ -18,7 +18,7 @@ import numpy as np
 from mathutils import Matrix, Vector
 
 from ..errors import CliError
-from . import anim, body, render, rig, util
+from . import anim, body, extras, motion, render, rig, util
 
 
 # ---------------------------------------------------------------- landmarks
@@ -525,7 +525,94 @@ def _reground(obj, arm):
     bpy.context.view_layer.update()
 
 
-def run(src, out, facing="auto", animations=(), render_dir=None, method="auto"):
+def chain_from_part(obj, arm, cid, verts, count=6):
+    """Extra bone chain through a part of the mesh (a tail): from where it meets the rest of the body to
+    its far end, through the centroids of slices at growing distance. Weights the part to the chain.
+    Returns the chain record for motion.py, or None if the part is too small."""
+    from mathutils import kdtree
+    co = util.get_coords(obj)
+    part = np.zeros(len(co), bool)
+    part[list(verts)] = True
+    if part.sum() < 20 or (~part).sum() < 20:
+        return None
+    kd = kdtree.KDTree(int((~part).sum()))
+    for i in np.nonzero(~part)[0]:
+        kd.insert(Vector(co[i]), int(i))
+    kd.balance()
+    pidx = np.nonzero(part)[0]
+    near = np.array([kd.find(Vector(co[i]))[2] for i in pidx])
+    root = co[pidx[np.argsort(near)[:10]]].mean(0)
+    d = np.linalg.norm(co[pidx] - root, axis=1)
+    edges = np.linspace(0, d.max() + 1e-6, count * 3 + 1)
+    cents = [root]
+    for a, b in zip(edges[:-1], edges[1:]):
+        m = (d >= a) & (d < b)
+        if m.sum() >= 3:
+            cents.append(co[pidx[m]].mean(0))
+    cents.append(co[pidx[np.argmax(d)]])
+    cents = np.array(cents)
+    seg = np.linalg.norm(np.diff(cents, axis=0), axis=1)
+    sc = np.concatenate([[0], np.cumsum(seg)])
+    t = np.linspace(0, sc[-1], count + 1)
+    pts = np.stack([np.interp(t, sc, cents[:, k]) for k in range(3)], 1)
+    # parent: the standard bone nearest to where the part attaches (a tail's root is by the pelvis)
+    names = rig.deform_bone_names()
+    W = util.weight_matrix(obj, names)
+
+    def seg_dist(n):
+        bb = arm.data.bones[n]
+        h, t = np.array(bb.head_local), np.array(bb.tail_local)
+        ab = t - h
+        u = np.clip((root - h) @ ab / max(ab @ ab, 1e-12), 0, 1)
+        return float(np.linalg.norm(root - (h + u * ab)))
+    parent = min(names, key=seg_dist)
+    bones = extras.chain_bones(cid, parent, pts)
+    extras.add_bones(arm, bones)
+    cn = [x["name"] for x in bones]
+    Wc, _ = extras._segment_weights(co[pidx], pts, cn)
+    allb = names + cn
+    Wall = np.zeros((len(co), len(allb)))
+    Wall[:, :len(names)] = W
+    Wall[pidx] = 0
+    Wall[pidx, len(names):] = Wc
+    util.set_weight_matrix(obj, Wall, allb)
+    return {"id": cid, "bones": cn, "parent": parent, "spring": dict(extras.SPRING), "radius": 0.03,
+            "enabled": True}
+
+
+def _extras(obj, arm, props, chains):
+    """Props in the hands and extra chains on an autorigged character (a stand-in for build.Built)."""
+    from types import SimpleNamespace
+
+    from . import props as props_mod
+    b = SimpleNamespace(arm=arm, body=obj, meshes=[obj], res=SimpleNamespace(bones=rig.deform_bone_names()),
+                        grips=[], chains=[], warnings=[], hair=None, capsules={}, spec={})
+    for cid, part, count in chains:
+        parts = list(obj.get("parts", []))
+        groups = obj.get("groups", {})
+        if part in parts:
+            at = np.zeros(len(obj.data.vertices), np.int32)
+            obj.data.attributes["part"].data.foreach_get("value", at)
+            verts = np.nonzero(at == parts.index(part))[0].tolist()
+        elif part in groups:
+            verts = list(groups[part])
+        else:
+            raise CliError("unknown_part", f"--extra-chain {cid}: no mesh part or vertex group '{part}'",
+                           hint="Mesh parts: " + (", ".join(parts) or "(one mesh)") + "; vertex groups: "
+                           + (", ".join(groups.keys()) or "(none)"))
+        ch = chain_from_part(obj, arm, cid, verts, count)
+        if ch is None:
+            raise CliError("bad_value", f"--extra-chain {cid}: part '{part}' is too small or is the whole mesh")
+        b.chains.append(ch)
+    if props:
+        props_mod.build_all(b, {"props": list(props)}, os.getcwd())
+    b.capsules = motion.leg_capsules(b)
+    return b
+
+
+def run(src, out, facing="auto", animations=(), render_dir=None, method="auto", props=(), chains=()):
+    """props: prop specs (as in character.json) to put in the hands; chains: (id, part or vertex group,
+    count) extra chains to cut out of the mesh (a tail)."""
     from .build import import_mesh_file
     t0 = time.time()
     util.reset_scene()
@@ -538,7 +625,7 @@ def run(src, out, facing="auto", animations=(), render_dir=None, method="auto"):
     bpy.data.objects.remove(tres.arm, do_unlink=True)
 
     before_actions = set(bpy.data.actions)
-    obj = import_mesh_file(src, "Character", any_pose=True)
+    obj = import_mesh_file(src, "Character", any_pose=True, keep_parts=bool(chains))
     # clips that came with the file would clash with Mesh2Motion clip names (Walk, Idle...)
     for a in [a for a in bpy.data.actions if a not in before_actions]:
         bpy.data.actions.remove(a)
@@ -556,11 +643,18 @@ def run(src, out, facing="auto", animations=(), render_dir=None, method="auto"):
     rig.pose_to_tpose(arm)
     rig.apply_pose_as_rest(arm, [obj])
     _reground(obj, arm)
+    extra = _extras(obj, arm, props, chains) if (props or chains) else None
     with_anims = anim.attach(arm, list(animations)) if animations else []
+    warnings = []
+    if extra is not None and with_anims:
+        for tr in arm.animation_data.nla_tracks:
+            for st in tr.strips:
+                warnings += motion.prepare(extra, st.action)
     renders = None
     if render_dir:
         clip = with_anims[0] if with_anims else None
-        paths, sheet = render.render_views([obj], render_dir, views=("front", "side"), size=512, samples=10,
+        shown = extra.meshes if extra is not None else [obj]
+        paths, sheet = render.render_views(shown, render_dir, views=("front", "side"), size=512, samples=10,
                                            prefix="autorig_tpose")
         renders = {"tpose": sheet}
         if clip:
@@ -569,14 +663,14 @@ def run(src, out, facing="auto", animations=(), render_dir=None, method="auto"):
                 arm.animation_data.action_slot = bpy.data.actions[clip].slots[0]
             fr = bpy.data.actions[clip].frame_range
             bpy.context.scene.frame_set(int(fr[0] + (fr[1] - fr[0]) * 0.3))
-            _, sheet2 = render.render_views([obj], render_dir, views=("front", "side"), size=512, samples=10,
+            _, sheet2 = render.render_views(shown, render_dir, views=("front", "side"), size=512, samples=10,
                                             prefix=f"autorig_{clip}")
             renders["posed"] = sheet2
             arm.animation_data.action = None
             bpy.context.scene.frame_set(0)
     for o in bpy.data.objects:
         if o.name in bpy.context.view_layer.objects:
-            o.select_set(o in (obj, arm))
+            o.select_set(o in (obj, arm) or (extra is not None and o in extra.meshes))
     bpy.context.view_layer.objects.active = arm
     kwargs = dict(filepath=out, export_format="GLB", use_selection=True, export_skins=True,
                   export_animations=bool(with_anims))
@@ -592,6 +686,8 @@ def run(src, out, facing="auto", animations=(), render_dir=None, method="auto"):
         "joints": joints,
         "skeleton": {"standard": "mesh2motion-human", "bones": len(arm.data.bones), "rest_pose": "T"},
         "animations": with_anims, "renders": renders, "seconds": round(time.time() - t0, 2),
+        **({"extra_bones": [b.name for b in arm.data.bones if b.name not in set(rig.m2m_bone_names())],
+            "warnings": warnings + extra.warnings} if extra is not None else {}),
         "tip": "Check renders: limbs should bend at the joints. If the fit is off, make sure the model "
                "stands upright in T- or A-pose with legs apart, then retry.",
     }

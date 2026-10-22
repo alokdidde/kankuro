@@ -10,7 +10,7 @@ from mathutils.bvhtree import BVHTree
 from .. import catalog, face, hairtex, morph, textures
 from .. import spec as specmod
 from ..errors import CliError
-from . import anim, body, garments, hair, hair_cards, materials, rig, util
+from . import accessories, anim, body, extras, garments, hair, hair_cards, materials, motion, rig, util
 
 
 class Built:
@@ -21,6 +21,11 @@ class Built:
         self.warnings = []
         self.timings = {}
         self.uv_info = {}
+        self.spec = {}
+        self.hair = None
+        self.chains = []  # extra bone chains with secondary motion (motion.py)
+        self.grips = []  # held props: finger poses, two-hand IK (motion.py)
+        self.capsules = {}
 
 
 def _tick(b, key, t0):
@@ -73,12 +78,14 @@ def conform_imported(obj, ref_coords, res, bone_filter=None, k=24):
     util.set_weight_matrix(obj, W, res.bones)
 
 
-def import_mesh_file(path, name, any_pose=False):
+def import_mesh_file(path, name, any_pose=False, keep_parts=False):
     """Import a .glb/.gltf/.obj/.fbx and join its meshes into one object (armatures are discarded).
 
     Skinned meshes keep their bind (rest) shape. With any_pose, a rest shape that is visibly broken
     (lying down, or parts scattered because the file only assembles them through the skin) is
-    replaced by the pose the file shows."""
+    replaced by the pose the file shows. With keep_parts, each vertex records the mesh object it came
+    from (int attribute "part", names in obj["parts"]) and its vertex groups (obj["groups"]: name ->
+    vertex indices), so a part can be picked out later (autorig --extra-chain)."""
     before = set(bpy.data.objects)
     ext = os.path.splitext(path)[1].lower()
     if ext in (".glb", ".gltf"):
@@ -101,7 +108,16 @@ def import_mesh_file(path, name, any_pose=False):
         raise CliError("no_mesh", f"No mesh found in {path}")
     if any_pose and any(o.type == "ARMATURE" for o in new):
         _bake_shown_pose(new, meshes)
-    for m in meshes:
+    parts, gnames = [], set()
+    for k, m in enumerate(meshes):
+        if keep_parts:
+            parts.append(m.name)
+            m.data.attributes.new("part", "INT", "POINT").data.foreach_set("value", [k] * len(m.data.vertices))
+            for vg in m.vertex_groups:
+                flag = [any(g.group == vg.index and g.weight > 0.5 for g in v.groups) for v in m.data.vertices]
+                if any(flag):
+                    m.data.attributes.new("g:" + vg.name, "BOOLEAN", "POINT").data.foreach_set("value", flag)
+                    gnames.add(vg.name)
         mw = m.matrix_world.copy()
         m.parent = None
         m.matrix_world = mw
@@ -117,6 +133,18 @@ def import_mesh_file(path, name, any_pose=False):
             bpy.ops.object.join()
     obj = meshes[0]
     obj.name = name
+    if keep_parts:
+        obj["parts"] = parts
+        groups = {}
+        for gn in gnames:
+            at = obj.data.attributes.get("g:" + gn)
+            if at is None:
+                continue
+            flag = np.zeros(len(obj.data.vertices), bool)
+            at.data.foreach_get("value", flag)
+            groups[gn] = np.nonzero(flag)[0].tolist()
+            obj.data.attributes.remove(at)
+        obj["groups"] = groups
     return obj
 
 
@@ -219,34 +247,53 @@ def reference_coords():
     return reference_body().coords
 
 
-def hide_body(body_obj, covers, max_dist=0.06):
-    """Delete body faces fully covered by clothing (prevents skin poking through when animated)."""
+def _covered(body_obj, covers, max_dist):
+    """Body vertices that have clothing within max_dist along their normal."""
+    co = util.get_coords(body_obj)
+    hidden = np.zeros(len(co), dtype=bool)
     if not covers:
-        return 0
+        return hidden
     tris, cos = [], []
     off = 0
     for o in covers:
-        co = util.get_coords(o)
+        gco = util.get_coords(o)
         o.data.calc_loop_triangles()
         for t in o.data.loop_triangles:
             tris.append([off + v for v in t.vertices])
-        cos.extend(co.tolist())
-        off += len(co)
+        cos.extend(gco.tolist())
+        off += len(gco)
     bvh = BVHTree.FromPolygons([Vector(c) for c in cos], tris)
     me = body_obj.data
     me.update()
-    co = util.get_coords(body_obj)
     nrm = np.empty(len(co) * 3)
     me.vertices.foreach_get("normal", nrm)
     nrm = nrm.reshape(-1, 3)
-    hidden = np.zeros(len(co), dtype=bool)
     for i in range(len(co)):
         n = Vector(nrm[i])
-        hit = bvh.ray_cast(Vector(co[i]) + n * 0.0005, n, max_dist)
-        if hit[0] is None:
-            continue
-        # also require coverage sideways so seams/hems keep some skin underneath
-        hidden[i] = True
+        hidden[i] = bvh.ray_cast(Vector(co[i]) + n * 0.0005, n, max_dist)[0] is not None
+    return hidden
+
+
+def _leg_verts(body_obj, res):
+    """Body vertices on the legs below the hip joints."""
+    W = util.weight_matrix(body_obj, res.bones)
+    legs = [res.bones.index(b) for side in "lr" for b in garments.LEG_CHAINS[side] if b in res.bones]
+    z = util.get_coords(body_obj)[:, 2]
+    return (W[:, legs].sum(1) > 0.5) & (z < res.arm.data.bones["thigh_l"].head_local.z)
+
+
+def hide_body(body_obj, covers, max_dist=0.06, hanging=(), legs=None):
+    """Delete body faces fully covered by clothing (prevents skin poking through when animated).
+    `hanging` garments (skirts, saree, a tunic's skirt) swing away from the legs on a stride, so
+    they never hide the leg vertices (`legs` mask): only fitted garments do."""
+    if not covers:
+        return 0
+    me = body_obj.data
+    co = util.get_coords(body_obj)
+    hidden = _covered(body_obj, covers, max_dist)
+    if hanging and legs is not None:
+        fitted = _covered(body_obj, [o for o in covers if o not in hanging], max_dist)
+        hidden = np.where(legs, fitted, hidden)
     # erode: keep a ring of skin under every hem
     adj = [[] for _ in range(len(co))]
     for e in me.edges:
@@ -268,6 +315,42 @@ def hide_body(body_obj, covers, max_dist=0.06):
     return len(kill)
 
 
+def region_mask(gobj, name, size, uv_per_m, width, project=None, mask_path=None):
+    """0..1 mask (size x size) of a material region on a garment's UV template: a user PNG (white =
+    in the region), or a band `width` metres wide (measured on the cloth) along its open edges
+    ("border") or lowest hems ("hem")."""
+    from PIL import Image
+
+    from .. import fabric
+    if mask_path:
+        im = Image.open(os.path.join(project, mask_path) if project else mask_path).convert("L")
+        return np.asarray(im.resize((size, size), Image.BILINEAR)).astype(np.float32) / 255
+    d = garments.edge_distance(gobj, name, cap=2 * width, uv_scale=uv_per_m)
+    me = gobj.data
+    me.calc_loop_triangles()
+    n = gobj.get("shell_faces", len(me.polygons))
+    tris = [t for t in me.loop_triangles if t.polygon_index < n]
+    uv = me.uv_layers["UVMap"].data
+    tri_uv = np.array([[uv[li].uv for li in t.loops] for t in tris])
+    tri_d = np.array([[d[v] for v in t.vertices] for t in tris])[..., None]
+    dm, cov = fabric.raster_attr(tri_uv, tri_d, size, bleed=4)
+    # distance is interpolated per texel, so the band's inner edge is a clean line, slightly softened
+    soft = 0.0015
+    return np.clip((width - dm[..., 0]) / soft * 0.5 + 0.5, 0, 1) * fabric.blur(cov.astype(np.float32), 1, 1)
+
+
+def _regions(g, gobj, size, uv_per_m, project):
+    """[(mask, resolved preset)] for a garment's material_regions."""
+    from .. import matlib
+    out = []
+    width0 = catalog.GARMENTS.get(g.get("type"), {}).get("border", 0.025)
+    for name, ref in (g.get("material_regions") or {}).items():
+        ref = matlib.normalize(ref)
+        m = region_mask(gobj, name, size, uv_per_m, ref.get("width", width0), project, ref.get("mask"))
+        out.append((m, matlib.resolve(ref)))
+    return out
+
+
 def _garment_materials(items, project, work_dir, spec, b):
     """Bake albedo + normal maps for garments (fabric preset, stitching, creases, AO, optional user maps)
     and assign their materials.
@@ -276,7 +359,7 @@ def _garment_materials(items, project, work_dir, spec, b):
     The Blender-side sampling runs first; the numpy texture bakes then run in parallel threads."""
     from concurrent.futures import ThreadPoolExecutor
 
-    from .. import fabric
+    from .. import fabric, matlib
     from . import clothshade
     size = int(spec["export"].get("texture_size", 2048))
     jobs = []
@@ -285,15 +368,18 @@ def _garment_materials(items, project, work_dir, spec, b):
         fab = g.get("fabric", gdef.get("fabric", "cotton"))
         color = g.get("color") or "#8a8f99"
         tex = os.path.join(project, g["texture"]) if g.get("texture") else None
+        finish = matlib.resolve(g["material"], g.get("color"), g.get("roughness")) if g.get("material") else None
         gobj.data.materials.clear()
-        if not gobj.data.uv_layers or (fab == "none" and not g.get("normal") and not g.get("height")):
-            gobj.data.materials.append(materials.make(f"Garment_{g['id']}", color=color, image_path=tex,
-                                                      roughness=g.get("roughness", 0.8), double_sided=True))
+        if not gobj.data.uv_layers or (fab == "none" and not g.get("normal") and not g.get("height")
+                                       and not g.get("material_regions")):
+            kw = materials.preset_kwargs(finish) if finish else dict(color=color, roughness=g.get("roughness", 0.8))
+            gobj.data.materials.append(materials.make(f"Garment_{g['id']}", image_path=tex, double_sided=True, **kw))
             continue
-        mask, uv_per_m = None, 0.45
+        mask, uv_per_m, seams = None, 0.45, None
         if g["id"] in b.uv_info:
             mask = fabric.mask_from_polys(garments.uv_polygons(gobj), size)
             uv_per_m = b.uv_info[g["id"]]["scale_px_per_m"]
+            seams = garments.seam_segments(gobj)
         hangs = gdef.get("source_group") == "helper-skirt" or any(k in gdef for k in ("drape", "loose", "flare"))
         ao, chain_s, crease_w, detail = clothshade.bake_maps(gobj, b.arm, b.body, b.meshes, b.res.bones, size,
                                                              leg_creases=not hangs)
@@ -301,19 +387,34 @@ def _garment_materials(items, project, work_dir, spec, b):
                   height_path=os.path.join(project, g["height"]) if g.get("height") else None,
                   normal_path=os.path.join(project, g["normal"]) if g.get("normal") else None,
                   strength=float(g.get("normal_strength", 1.0)), ao=ao, chain_s=chain_s, crease_w=crease_w,
-                  detail=detail)
+                  detail=detail, seams=seams, placket_spec=(b.uv_info.get(g["id"]) or {}).get("placket"),
+                  finish=finish, roughness=g.get("roughness"),
+                  regions=_regions(g, gobj, size, uv_per_m, project) if gobj.data.uv_layers else ())
         jobs.append((g, gobj, os.path.join(work_dir, f"garment_{g['id']}"), uv_per_m, kw))
     with ThreadPoolExecutor(max_workers=min(4, max(1, len(jobs)))) as ex:
         results = list(ex.map(lambda j: fabric.bake(j[2], size, j[3], **j[4]), jobs))
-    for (g, gobj, *_), (albedo, normal, m) in zip(jobs, results):
+    for (g, gobj, *_, kw), (albedo, normal, m) in zip(jobs, results):
+        extra = materials.preset_kwargs(kw["finish"]) if kw["finish"] else {}
+        extra.pop("color", None)
+        extra.setdefault("specular", m["specular"])
+        extra.update(roughness=m["roughness"], metallic=m["metallic"])
         gobj.data.materials.append(materials.make(
-            f"Garment_{g['id']}", image_path=albedo, roughness=g.get("roughness", m["roughness"]),
-            double_sided=True, normal_path=normal, specular=m["specular"], sheen=m["sheen"],
-            sheen_roughness=m["sheen_roughness"], sheen_tint=m["sheen_tint"]))
+            f"Garment_{g['id']}", image_path=albedo, double_sided=True, normal_path=normal,
+            roughness_path=m["mr"], metallic_path=m["mr"], sheen=m["sheen"],
+            sheen_roughness=m["sheen_roughness"], sheen_tint=m["sheen_tint"], **extra))
 
 
 def layer_of(g):
     return g.get("layer", catalog.GARMENTS.get(g.get("type"), {}).get("layer", 1))
+
+
+def _skin_ao(res, body_obj, eyes):
+    """Per base-vertex ambient occlusion of the skin (eye sockets, nostrils, lips, ears, folds)."""
+    from . import clothshade
+    ao = clothshade.vertex_ao(body_obj, clothshade.scene_bvh([body_obj, eyes]), np.random.default_rng(11))
+    full = np.ones(len(res.coords))
+    full[np.asarray(body_obj["mh_verts"])] = ao
+    return full
 
 
 def _brow_shape(skin):
@@ -325,6 +426,7 @@ def _brow_shape(skin):
 def build_scene(spec, project, work_dir):
     """Build everything in the current Blender scene. Returns a Built."""
     b = Built()
+    b.spec = spec
     t = time.time()
     util.reset_scene()
     _REF.clear()
@@ -388,6 +490,7 @@ def build_scene(spec, project, work_dir):
             hobj.data.materials[0] = materials.make("HairBase", image_path=base_img, roughness=0.75)
             hobj.data.materials[1] = materials.make_hair("Hair", cards_img)
         b.meshes.append(hobj)
+        b.hair = hobj
         t = _tick(b, "hair", t)
     # skin
     skin = spec["skin"]
@@ -397,17 +500,26 @@ def build_scene(spec, project, work_dir):
         hs = spec.get("hair") or {}
         # tint the scalp under procedural hair so it seems to grow out of the skin
         scalp = hair.coverage_mask(res, hobj) if hs.get("style") and not hs.get("source") else None
+        detail = skin.get("detail", True)
+        ao = _skin_ao(res, body_obj, eyes) if detail else None
         img = textures.skin_texture(skin["color"], os.path.join(work_dir, "skin.png"),
                                     lips=skin.get("lips", True), brows=skin.get("brows", True),
                                     brow_hex=skin.get("brow_color") or hs.get("color"), scalp=scalp,
-                                    scalp_hex=hs.get("color") or "#3b2a1e", brow_shape=_brow_shape(skin))
+                                    scalp_hex=hs.get("color") or "#3b2a1e", brow_shape=_brow_shape(skin),
+                                    detail=detail, ao=ao)
     skin_n = textures.skin_detail(os.path.join(work_dir, "skin"))
-    body_obj.data.materials.append(materials.make("Skin", image_path=img, roughness=skin.get("roughness", 0.6),
-                                                  normal_path=skin_n, subsurface=0.3, specular=0.35))
-    eye_img = os.path.join(rig.DATA, "eyes", "brown_eye.png")
-    if spec["eyes"].get("iris_color"):
-        eye_img = materials.recolor_iris(eye_img, spec["eyes"]["iris_color"], os.path.join(work_dir, "eyes.png"))
-    eyes.data.materials.append(materials.make("Eyes", image_path=eye_img, roughness=0.15))
+    rough = skin.get("roughness", 0.6)
+    if skin.get("detail", True):
+        shade = materials.skin_shading(skin["color"], rough)
+        rmap = textures.skin_roughness(shade.pop("roughness"), os.path.join(work_dir, "skin_roughness.png"))
+    else:
+        shade, rmap = dict(subsurface=0.3, specular=0.35), None
+    body_obj.data.materials.append(materials.make("Skin", image_path=img, roughness=rough, normal_path=skin_n,
+                                                  roughness_path=rmap, **shade))
+    eye_img = materials.eye_texture(os.path.join(rig.DATA, "eyes", "brown_eye.png"), os.path.join(work_dir, "eyes.png"),
+                                    spec["eyes"].get("iris_color"))
+    # a wet, clear coat over the eye gives the catchlight that makes it look alive
+    eyes.data.materials.append(materials.make("Eyes", image_path=eye_img, roughness=0.3, specular=0.5, coat=1.0))
 
     if skin.get("brows", True):
         bobj = hair_cards.brows(res, body_obj, density=skin.get("brow_density") or 1.0, **_brow_shape(skin))
@@ -420,7 +532,7 @@ def build_scene(spec, project, work_dir):
         t = _tick(b, "brows", t)
 
     # garments, inner layers first
-    covers, covers_all, to_shade = [], [], []
+    covers, covers_all, to_shade, hanging = [], [], [], []
     order = sorted(spec["garments"], key=lambda g: (g.get("layer", catalog.GARMENTS.get(g.get("type"), {}).get("layer", 1))))
     for rank, g in enumerate(order):
         if g.get("source"):
@@ -429,7 +541,8 @@ def build_scene(spec, project, work_dir):
             # keep it outside the skin and anything already worn
             garments.conform(gobj, garments.body_bvh(body_obj), 0.003 + 0.003 * rank)
             util.add_armature_modifier(gobj, res.arm)
-            keep_mats = not g.get("texture") and not g.get("color") and len(gobj.data.materials) > 0
+            keep_mats = (not g.get("texture") and not g.get("color") and not g.get("material")
+                         and len(gobj.data.materials) > 0)
         else:
             # stack over lower layers only; footwear always sits under hems rather than over them
             under = [o for o, l in covers_all if l < layer_of(g)]
@@ -444,6 +557,9 @@ def build_scene(spec, project, work_dir):
         gobj["garment_id"] = g["id"]
         if g.get("hide_body", True):
             covers.append(gobj)
+            gd = catalog.GARMENTS.get(g.get("type"), {})
+            if gd.get("source_group") == "helper-skirt" or "flare" in gd:
+                hanging.append(gobj)
         covers_all.append((gobj, layer_of(g)))
         b.meshes.append(gobj)
     if spec["garments"]:
@@ -451,20 +567,31 @@ def build_scene(spec, project, work_dir):
     if to_shade:
         _garment_materials(to_shade, project, work_dir, spec, b)
         t = _tick(b, "garment_textures", t)
+    if spec.get("extra_bones") or spec.get("accessories") or spec.get("props"):
+        from . import props
+        extras.build_chains(b, spec)
+        accessories.build_all(b, spec, project)
+        props.build_all(b, spec, project)
+        b.capsules = motion.leg_capsules(b)
+        t = _tick(b, "extras", t)
     if "res" in _REF:
         bpy.data.objects.remove(_REF.pop("res").arm, do_unlink=True)
     if spec["export"].get("hide_body_under_clothes", True) and covers:
-        n = hide_body(body_obj, covers)
+        n = hide_body(body_obj, covers, hanging=hanging, legs=_leg_verts(body_obj, res))
         b.hidden_faces = n
         t = _tick(b, "hide_body", t)
     return b
 
 
-def export_glb(b, out_path, animations=()):
+def export_glb(b, out_path, animations=(), secondary=None):
+    """Export the GLB. secondary: extra chain ids to bake secondary motion for (None = all enabled)."""
     t = time.time()
     clips = []
     if animations:
         clips = anim.attach(b.arm, list(animations))
+        for tr in b.arm.animation_data.nla_tracks:
+            for st in tr.strips:
+                b.warnings += motion.prepare(b, st.action, secondary)
     bpy.context.view_layer.update()
     for o in bpy.data.objects:
         if o.name in bpy.context.view_layer.objects:
@@ -481,6 +608,17 @@ def export_glb(b, out_path, animations=()):
     bpy.ops.export_scene.gltf(**kwargs)
     b.timings["export"] = round(time.time() - t, 3)
     return clips
+
+
+def pose_clip(b, name, frame, secondary=None):
+    """Pose the character with a clip at a frame (0..1 = fraction of the clip, else a frame number),
+    with its extra motion (secondary motion, grips, two-hand IK) baked in."""
+    f = anim.pose_at(b.arm, name, frame)
+    act = b.arm.animation_data.action.copy()
+    b.warnings += motion.prepare(b, act, secondary)
+    motion._assign(b.arm, act)
+    bpy.context.scene.frame_set(f)
+    return f
 
 
 def set_expression(b, weights):
@@ -503,6 +641,10 @@ def summary(b):
     co = util.get_coords(b.body)
     out["height_m"] = round(float(co[:, 2].max() - co[:, 2].min()), 3)
     out["skeleton"] = {"standard": "mesh2motion-human", "bones": len(b.arm.data.bones), "pose": "T"}
+    std = set(rig.m2m_bone_names())
+    extra = [x.name for x in b.arm.data.bones if x.name not in std]
+    if extra:
+        out["skeleton"]["extra_bones"] = extra
     keys = b.body.data.shape_keys
     out["blendshapes"] = {"set": "arkit52" if keys else "none", "count": len(keys.key_blocks) - 1 if keys else 0,
                           "meshes": [m.name for m in b.meshes if m.data.shape_keys]}

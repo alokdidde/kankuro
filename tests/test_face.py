@@ -49,5 +49,51 @@ class FaceBuild(unittest.TestCase):
         self.assertEqual(out["blendshapes"]["count"], 0)
 
 
+class SkinDetail(unittest.TestCase):
+    """#6: faces at darker tones need tone variation, readable eyes and tone-aware shading."""
+
+    def test_detail_varies_the_face_tone(self):
+        from PIL import Image
+        from kankuro import textures
+        d = tempfile.mkdtemp()
+        flat = textures.skin_texture("#7f4f32", os.path.join(d, "flat.png"), size=512, detail=False)
+        rich = textures.skin_texture("#7f4f32", os.path.join(d, "rich.png"), size=512, detail=True)
+        a = np.asarray(Image.open(flat)).astype(float)
+        b = np.asarray(Image.open(rich)).astype(float)
+        # warmer cheeks/nose, darker lids: the tone spreads out (it was nearly one flat value)
+        self.assertGreater(b[..., 0].std(), a[..., 0].std() * 1.2)
+        self.assertGreater((np.abs(b - a).max(-1) > 25).sum(), 200)  # lash lines, lids
+        reg = textures.face_regions()
+        for k in ("cheeks", "nose", "lids", "lash", "under", "tzone"):
+            self.assertGreater(reg[k].max(), 0.5, k)
+
+    def test_roughness_map_has_a_shinier_tzone(self):
+        from PIL import Image
+        from kankuro import textures
+        out = textures.skin_roughness(0.6, os.path.join(tempfile.mkdtemp(), "r.png"), size=256)
+        g = np.asarray(Image.open(out))[..., 1] / 255
+        self.assertLess(g.min(), 0.5)
+        self.assertAlmostEqual(float(np.median(g)), 0.64, delta=0.02)
+
+    def test_shading_depends_on_tone(self):
+        import bpy  # noqa: F401
+        from kankuro.blender import materials
+        fair, dark = materials.skin_shading("#f1c7a8", 0.6), materials.skin_shading("#7f4f32", 0.6)
+        self.assertLess(dark["subsurface"], fair["subsurface"])
+        self.assertGreater(dark["specular"], fair["specular"])
+
+    def test_sclera_is_bright(self):
+        import bpy  # noqa: F401
+        from PIL import Image
+        from kankuro.blender import materials, rig
+        src = os.path.join(rig.DATA, "eyes", "brown_eye.png")
+        out = materials.eye_texture(src, os.path.join(tempfile.mkdtemp(), "e.png"), "#3b2416")
+        a = np.asarray(Image.open(src).convert("RGB")).astype(float)
+        b = np.asarray(Image.open(out).convert("RGB")).astype(float)
+        white = (a.max(-1) - a.min(-1)) / (a.max(-1) + 1e-6) < 0.25
+        white &= a.mean(-1) > 0.6 * 255
+        self.assertGreater(b[white].mean(), a[white].mean())
+
+
 if __name__ == "__main__":
     unittest.main()

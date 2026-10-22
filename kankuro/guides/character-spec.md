@@ -56,6 +56,9 @@ that loads the project checks it, so a mistake shows up as a normal JSON error w
 | `face` | object | face shape sliders and facial blendshapes |
 | `hair` | object or `null` | `null` is bald |
 | `garments` | array | clothes, in any order (layers decide stacking) |
+| `accessories` | array | rigid pieces on one bone (optional) |
+| `props` | array | objects in the hands (optional) |
+| `extra_bones` | array | extra bone chains: tails, braids (optional) |
 | `export` | object | build options |
 
 ### `body`
@@ -124,13 +127,63 @@ with a `source`.
 | `source` | path | imported mesh (only for `custom`) |
 | `color` | hex | base colour (multiplies the texture) |
 | `texture` | path | albedo on the garment's UV template |
-| `fabric` | string | relief preset (`cotton`, `denim`, `knit`, `canvas`, `leather`, `silk`, `spandex`) or `none`; missing = the type's default |
+| `fabric` | string | relief preset (`cotton` woven, `jersey`, `denim`, `knit`, `canvas`, `leather`, `silk`, `spandex`) or `none`; missing = the type's default |
 | `height` | path | greyscale relief on the template, white = raised |
 | `normal` | path | tangent-space normal map on the template (OpenGL, green up) |
 | `normal_strength` | number | scales the final normal map |
 | `roughness` | number | material roughness |
+| `material` | string or object | a material preset for the whole garment (`"bronze"`, or `{"preset": "gem", "color": "#1f5fbf", "roughness": 0.05}`); see [Materials](cli-reference.md#materials) |
+| `material_regions` | object | region name -> preset name or `{"preset", "color"?, "roughness"?, "width"?, "mask"?}`. Built-in regions `border` and `hem` (a band `width` metres wide along the open edges); any other name needs `mask`, a PNG on the UV template |
 | `layer` | int | stacking order override; higher is further out |
 | `hide_body` | bool | `false` keeps the skin under this garment |
+
+### `accessories[]`
+
+Written by [`kankuro accessory`](cli-reference.md#accessory).
+
+| field | type | meaning |
+|---|---|---|
+| `id` | string | unique across garments, accessories, props and chains; the mesh name in the GLB |
+| `file` / `builtin` | path / string | a mesh modelled on the reference body, or a built-in (`circlet`, `ring_earring_l`, ...) |
+| `bone` | string | the Mesh2Motion bone it follows (or a bone of an `extra_bones` chain) |
+| `fit` | string | `none` (default), `wrap`, `chest`, `neck` or `pierce` |
+| `hang` | int | bones added under it for a dangling part |
+| `offset`, `rotate`, `scale` | [x,y,z] m, [x,y,z] degrees, number | placement on the reference body |
+| `material`, `color`, `roughness` | | a [material preset](cli-reference.md#materials) and overrides |
+| `layer` | int | stacking against garments (default 10) |
+| `hide_hair` | bool | press the hair under a head band (default true on `head`) |
+
+### `props[]`
+
+Written by [`kankuro prop`](cli-reference.md#prop).
+
+| field | type | meaning |
+|---|---|---|
+| `id` | string | unique id; the mesh name in the GLB |
+| `file` / `builtin` | path / string | a mesh held in the T-posed reference hand, or a built-in (`handle`, `staff`, `flute`) |
+| `hand` | `l`, `r`, `both` | which hand holds it |
+| `anchor` | `l`, `r` | with `both`: the hand it hangs from |
+| `grip` | string | finger pose from `kankuro grip list` |
+| `grip_weight` | 0..1 | how much the grip replaces the clip's fingers (default 1) |
+| `reach` | number | with `both`: metres along the prop to the other hand |
+| `offset`, `rotate`, `scale`, `material`, `color`, `roughness` | | as for accessories |
+
+### `extra_bones[]`
+
+Written by [`kankuro bones`](cli-reference.md#bones). Bones are named `<id>_01` ... `<id>_<count>`.
+
+| field | type | default | meaning |
+|---|---|---|---|
+| `id` | string | | chain id |
+| `parent` | string | | the standard bone it hangs from |
+| `count` | int | 6 | bones, 1..32 |
+| `length` | number | 0.6 | total length in metres |
+| `taper` | 0..1 | 0.5 | shorter and thinner towards the tip |
+| `curve` | `{"up": F}` or `{"down": F}` | | bend along the length |
+| `radius` | number | 0 | tube mesh radius (0 = bones only) |
+| `color`, `material` | | hair colour | the tube's look |
+| `follow` | `"hair"` | | bind the hanging hair to the chain |
+| `secondary_motion` | object or `false` | `{}` | spring `stiffness` (0.35), `damping` (0.25), `gravity` (1.0); `false` keeps it rigid in clips |
 
 ### `export`
 

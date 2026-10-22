@@ -15,6 +15,7 @@ kankuro [-p PROJECT] [--version] <command> [options]
 * Project and spec: [init](#init) · [show](#show) · [set](#set) · [catalog](#catalog) · [morphs](#morphs) · [skin](#skin)
 * Face and look: [face](#face) · [eyes](#eyes) · [brows](#brows) · [Colour names](#colour-names)
 * Hair and clothes: [hair](#hair) · [garment](#garment) · [template](#template)
+* Attachments: [accessory](#accessory) · [prop](#prop) · [grip](#grip) · [bones](#bones)
 * Output: [render](#render) · [build](#build) · [animations](#animations)
 * Assets and rigging: [reference-body](#reference-body) · [autorig](#autorig) · [validate](#validate)
 * Help: [schema](#schema) · [guide](#guide) · [--help](#built-in-help)
@@ -156,6 +157,7 @@ Values are parsed as JSON when they can be (`0.6`, `183`, `true`, `null`), other
 | `skin.color` | hex or [name](#colour-names) | whole-body skin tone |
 | `skin.roughness` | number | skin roughness (default 0.6) |
 | `skin.lips` / `skin.brows` | bool | tinted lips / eyebrows (strand cards plus a faint painted shadow) on or off |
+| `skin.detail` | bool | natural tone variation, cavity shading and a T-zone roughness map (default `true`) |
 | `skin.brow_color` | hex, hair-colour name or `null` | eyebrow colour (`null` = follow the hair colour) |
 | `skin.brow_thickness` / `brow_arch` / `brow_density` / `brow_length` | number | eyebrow shape, see [brows](#brows) |
 | `eyes.iris_color` | hex, eye-colour name or `null` | iris colour (`null` = the default brown eye texture) |
@@ -194,11 +196,12 @@ Prints `{"changed": {...}, "spec": {...}}`. Errors: `bad_assignment`, `bad_path`
 List what's available.
 
 ```
-kankuro catalog [presets|body_sliders|face_sliders|face_presets|colors|brows|hair_styles|garments|fabrics|expressions]
+kankuro catalog [presets|body_sliders|face_sliders|face_presets|colors|brows|hair_styles|garments|fabrics|materials|expressions]
 ```
 
 With no section it prints everything. Garment entries include `slot`, `layer` and default
-`fabric`. `expressions` lists the 52 ARKit blendshape names and the expression presets. See [Garment types](#garment-types) for the current list.
+`fabric`. `materials` lists the [material presets](#materials) with their parameter values and the
+built-in regions. `expressions` lists the 52 ARKit blendshape names and the expression presets. See [Garment types](#garment-types) for the current list.
 
 ### morphs
 
@@ -226,7 +229,7 @@ kankuro set "body.morphs.chin/chin-prognathism-decr|incr=0.3"
 Whole-body skin tone, a painted skin texture, and eyebrow colour.
 
 ```
-kankuro skin [--color HEX|NAME] [--texture PNG | --texture ""] [--brow-color HEX|NAME]
+kankuro skin [--color HEX|NAME] [--texture PNG | --texture ""] [--brow-color HEX|NAME] [--detail true|false]
 ```
 
 * `--color` takes `#RRGGBB` or a skin-tone name (see [Colour names](#colour-names)), e.g. `--color tan`.
@@ -234,6 +237,13 @@ kankuro skin [--color HEX|NAME] [--texture PNG | --texture ""] [--brow-color HEX
 
 * `--texture` takes a PNG painted on the body UV layout (`kankuro template body` gives the layout).
   Pass an empty string to remove it.
+
+* `--detail true|false` (`skin.detail`, default `true`): natural tone variation under the colour
+  (warmer cheeks and nose, darker upper lids and lash lines, a little shadow under the eyes), baked
+  cavity shading in the folds, a roughness map (shinier T-zone and lips, drier cheeks) and
+  subsurface/specular tuned to the tone, so faces keep their shape at darker tones such as
+  `golden_brown` and `brown`. `false` gives one flat tone. Ignored when a `--texture` is set
+  (paint the variation into it instead).
 
 Prints `{"skin": {...}}`.
 
@@ -501,6 +511,7 @@ Prints `{"hair": {...}}` (`null` after `remove`).
 kankuro garment add <type> [--id ID] [--color HEX] [--texture PNG] [--fabric NAME] [--keep-slot] [surface options]
 kankuro garment import --file MESH --id ID [--color HEX] [--texture PNG] [surface options]
 kankuro garment set <id> [--color HEX] [--texture PNG|""] [--layer N] [--hide-body true|false] [surface options]
+kankuro garment set <id> [--material PRESET|none] [--material-region NAME=PRESET[:#RRGGBB]] [--mask PNG]
 kankuro garment remove <id>
 ```
 
@@ -519,11 +530,14 @@ and body skin under clothing is hidden so it can't poke through. `--layer N` ove
 | `--file` | import | your mesh, modelled on the reference body |
 | `--color` | all | base colour (multiplies the texture if there is one) |
 | `--texture` | all | albedo PNG painted on the garment's UV template; `""` removes it |
-| `--fabric` | all | surface relief preset (`cotton`, `denim`, `knit`, `canvas`, `leather`, `silk`, `spandex`) or `none` |
+| `--fabric` | all | surface relief preset (`cotton` = woven, `jersey` = T-shirt knit, `denim`, `knit`, `canvas`, `leather`, `silk`, `spandex`) or `none` |
 | `--height` | all | greyscale relief PNG on the UV template; white = raised. Added on top of the fabric. `""` removes it |
 | `--normal` | all | tangent-space normal map PNG (OpenGL, green = up) on the template; blended in. `""` removes it |
 | `--normal-strength` | all | scale for the final normal map (default 1.0) |
 | `--roughness` | all | material roughness |
+| `--material` | all | a [material preset](#materials) for the whole garment (`bronze` armour, `gold` lamé); `none` removes it. Without `--color` in the same command the preset's own colour is used |
+| `--material-region` | all | `NAME=PRESET[:#RRGGBB]`: a region of the UV template in another material, e.g. `border=gold_zari`. Built-in regions: `border`, `hem`; any other name needs `--mask`. `PRESET` `none` removes the region. Repeatable |
+| `--mask` | all | greyscale PNG on the garment's UV template (white = in the region) for the `--material-region` in the same command |
 | `--layer` | all | stacking order override |
 | `--hide-body` | all | `false` keeps the body skin under this garment |
 | `--keep-slot` | add, import | don't replace the garment already in this slot |
@@ -534,11 +548,11 @@ Prints `{"garment": {...}, "garments": [...], "replaced"?: [...]}`.
 
 | type | slot | layer | default fabric | description |
 |---|---|---|---|---|
-| `tshirt` | top | 1 | cotton | short-sleeve crew-neck T-shirt |
-| `longsleeve` | top | 1 | cotton | long-sleeve crew-neck top |
-| `tanktop` | top | 1 | cotton | sleeveless tank top |
+| `tshirt` | top | 1 | jersey | short-sleeve crew-neck T-shirt |
+| `longsleeve` | top | 1 | jersey | long-sleeve crew-neck top |
+| `tanktop` | top | 1 | jersey | sleeveless tank top |
 | `blouse` | top | 1 | silk | cropped sari blouse (choli): short sleeves, scoop neck |
-| `kurta` | top | 2 | cotton | knee-length tunic, 3/4 sleeves, flared, side slits |
+| `kurta` | top | 3 | cotton | loose knee-length tunic worn over a dhoti/churidar: band collar, buttoned placket, 3/4 sleeves, side slits |
 | `jacket` | outer | 3 | canvas | loose long-sleeve outer layer covering the hips |
 | `pants` | bottom | 2 | denim | full-length trousers |
 | `shorts` | bottom | 2 | denim | mid-thigh shorts |
@@ -546,7 +560,7 @@ Prints `{"garment": {...}, "garments": [...], "replaced"?: [...]}`.
 | `skirt` | bottom | 2 | cotton | knee-length skirt |
 | `long_skirt` | bottom | 2 | silk | ankle-length skirt |
 | `churidar` | bottom | 0 | cotton | fitted ankle-length trousers gathered over the lower leg |
-| `dhoti` | bottom | 2 | canvas | draped, loose legs from waist to mid-calf |
+| `dhoti` | bottom | 2 | cotton | draped, loose legs to mid-calf, pleated front panel between the legs, rolled waist, back tuck |
 | `saree` | bottom | 3 | silk | Nivi drape: pleated skirt plus pallu over the left shoulder; wear over `blouse` |
 | `dupatta` | shawl | 4 | silk | long scarf across the chest and over both shoulders |
 | `shoes` | feet | 2 | leather | closed shoes with a sole |
@@ -556,6 +570,15 @@ Prints `{"garment": {...}, "garments": [...], "replaced"?: [...]}`.
 
 `kankuro catalog garments` always has the current list.
 
+Layers decide stacking whatever order garments are added in: a `kurta` (3) always sits over a `dhoti`
+or `churidar`, a `saree` (3) over its `blouse`. Skirt-like garments (`skirt`, `long_skirt`, `saree`,
+the skirt of a `kurta`) are skinned as one hanging tube, so they don't split like trousers on a stride.
+
+UV templates are unfolded panels (front on the left, back on the right) at one scale in pixels per
+metre, so the sides of the body and the crotch aren't squeezed into slivers. Since 0.3.0 the panels are
+relaxed this way for every garment except the `saree`: re-run `kankuro template <type>` before painting,
+and repaint textures made on an older template.
+
 ```bash
 kankuro garment add tshirt --color "#eeeeee"
 kankuro garment add tanktop --keep-slot               # under the T-shirt
@@ -563,6 +586,54 @@ kankuro garment add jacket --color "#3d5a40" --fabric denim
 kankuro garment set jacket --texture ./camo.png --height ./camo_height.png
 kankuro garment remove jacket
 ```
+
+#### Materials
+
+Metal, gem, pearl, lacquer and zari presets. Each is a set of Principled BSDF values that exports as glTF
+PBR metallic-roughness: gems add `KHR_materials_transmission` and `KHR_materials_ior`, lacquer and pearl
+add a clear coat, steel a brushed (anisotropic) highlight, pearl a thin-film shimmer. A metal's colour is
+the colour of its reflection, so the swatch colours look pale and the renders rich.
+
+| preset | | kind | colour | metallic | roughness | extra |
+|---|---|---|---|---|---|---|
+| `gold` | ![gold](images/materials/gold.jpg) | metal | `#fcd88a` | 1 | 0.2 | |
+| `rose_gold` | ![rose_gold](images/materials/rose_gold.jpg) | metal | `#f7c9ae` | 1 | 0.22 | |
+| `brass` | ![brass](images/materials/brass.jpg) | metal | `#f2d892` | 1 | 0.3 | |
+| `bronze` | ![bronze](images/materials/bronze.jpg) | metal | `#d9a878` | 1 | 0.38 | |
+| `silver` | ![silver](images/materials/silver.jpg) | metal | `#fbf8f2` | 1 | 0.16 | |
+| `steel` | ![steel](images/materials/steel.jpg) | metal | `#c8c9cb` | 1 | 0.28 | anisotropy 0.5 |
+| `iron_dark` | ![iron_dark](images/materials/iron_dark.jpg) | metal | `#6e6b67` | 1 | 0.55 | |
+| `gem` | ![gem](images/materials/gem.jpg) | gem | `#c2102e` (set with `--color`) | 0 | 0.02 | transmission 1, IOR 1.76 |
+| `pearl` | ![pearl](images/materials/pearl.jpg) | dielectric | `#f1ebdf` | 0 | 0.32 | coat 0.8, subsurface 0.15, thin film 380 nm |
+| `gold_zari` | ![gold_zari](images/materials/gold_zari.jpg) | thread | `#e6c27a` | 0.85 | 0.38 | keeps the fabric's weave relief |
+| `lacquer` | ![lacquer](images/materials/lacquer.jpg) | dielectric | `#8a1a17` (set with `--color`) | 0 | 0.4 | coat 1 |
+
+`kankuro catalog materials` prints the same values. A region of a garment takes a preset's colour,
+metallic and roughness through a metallic-roughness texture, and keeps the cloth's weave relief, folds
+and occlusion; transmission, coat and anisotropy apply only to a whole-garment `--material`.
+
+**Regions.** `border` is a band along every open edge of the cloth (hems, neckline, cuffs, a saree's
+long edges and the pallu end), not along sewn seams or edges tucked in at the waist. `hem` is the
+band along the lowest open edges only. The band is measured on the unfolded cloth, so it keeps its
+width through pleats. Its width comes from the garment type (7 cm on a `saree`, 4.5 cm on a `dhoti`,
+1.5 cm on a `kurta`, 2.5 cm otherwise) or from `width` in the spec. `kankuro template` writes both
+masks (`<id>_border_mask.png`, `<id>_hem_mask.png`); paint over one to make your own region and pass
+it with `--mask`.
+
+A material change is a spec edit: `render` and `build` pick it up, nothing else needs rebuilding.
+
+![A saree with a gold zari border](images/materials/saree_gold_zari.jpg)
+
+```bash
+kankuro garment set saree --material-region border=gold_zari
+kankuro garment set pants --material-region hem=gem:#1f5fbf
+kankuro garment set kurta --material-region trim=silver --mask ./kurta_trim_mask.png
+kankuro garment import --file armour.glb --id kavach --material bronze
+kankuro garment set kavach --material none     # back to the mesh's own materials
+kankuro catalog materials
+```
+
+The swatches come from `python tools/material_swatches.py`.
 
 ### template
 
@@ -579,7 +650,8 @@ kankuro template [TARGET ...] [--out DIR] [--size PX]
 | `--size` | 2048 | image size in pixels (square) |
 
 For each target it writes `<id>_template.png` (the garment's flat sketch, seam lines and labels on a
-white background) and `<id>_mask.png` (white where the texture is used). For most garments the
+white background) and `<id>_mask.png` (white where the texture is used), plus the built-in
+[material regions](#materials) `<id>_border_mask.png` and `<id>_hem_mask.png`. For most garments the
 **left half is the front** and the **right half is the back, seen from behind**. The `saree` has its
 own layout, described in its template's labels.
 
@@ -591,11 +663,169 @@ kankuro template tshirt            # templates/tshirt_template.png + tshirt_mask
 kankuro template body --size 4096  # skin layout for `kankuro skin --texture`
 ```
 
-Prints `{"templates": {"<id>": {"template", "mask", "layout", "size"}}, "how_to_retexture": "..."}`.
+Prints `{"templates": {"<id>": {"template", "mask", "border_mask", "hem_mask", "layout", "size"}}, "how_to_retexture": "..."}`.
 Imported (custom) garments keep their own UVs and fail with `custom_garment`.
 
 The full retexturing workflow, with ready-made image-model prompts, is in
 [codex-textures.md](codex-textures.md).
+
+## Attachments
+
+Things that ride on the skeleton without being cloth: rigid jewellery and armour pieces
+([accessory](#accessory)), objects in the hand ([prop](#prop)), and extra bone chains for tails,
+braids and dangling ornaments ([bones](#bones)). None of them changes the 65 Mesh2Motion bones
+(66 with `root`): extra bones always hang under a standard bone, so every clip still plays and
+`validate` lists them under `extra_bones`.
+
+Their placement is modelled on the neutral body (`kankuro reference-body`) and carried onto each
+character with a best-fit similarity transform of the body around the bone, so one mesh fits every
+body shape. Offsets are in metres on the reference body: x is the character's left, y is back, z is up.
+
+![Gold circlet, ring earrings and bangles, a staff in the hand, and a tail](images/attach/attachments.jpg)
+
+### accessory
+
+A rigid mesh that follows one bone: a crown, earrings, a necklace, armlets, bangles, a belt buckle.
+
+```
+kankuro accessory add|set ID [--file MESH | --builtin NAME] [--bone BONE] [--fit FIT] [--hang N]
+                      [--offset X,Y,Z] [--rotate X,Y,Z] [--scale S]
+                      [--material PRESET] [--color C] [--roughness R] [--layer N] [--hide-hair true|false]
+kankuro accessory remove ID
+kankuro accessory list
+```
+
+| option | meaning |
+|---|---|
+| `ID` | the accessory's id, also its mesh name in the GLB. `add <built-in name>` with no `--file` uses that built-in |
+| `--file` | a mesh (`.glb`, `.gltf`, `.obj`, `.fbx`) modelled on the reference body |
+| `--bone` | the Mesh2Motion bone it follows (`head`, `neck_01`, `spine_03`, `upperarm_l`, `lowerarm_r`, ...) |
+| `--fit` | `none` (default): rigid; if it cuts into the body it slides along the bone until clear, so a crown rides up a bigger head. `wrap`: scaled radially to hug a limb (armlets, bangles). `chest` / `neck`: the lower part settles onto the chest (or the clothes on it), the clasp stays put. `pierce`: rigid, no adjustment (earrings go through the lobe) |
+| `--hang` | adds N bones under it for a dangling part (earring drops, necklace pendants); the part below the attach point is weighted down the chain and swings on clips |
+| `--offset`, `--rotate`, `--scale` | placement adjustment: metres, degrees about its centre, uniform scale |
+| `--material`, `--color`, `--roughness` | a [material preset](#materials); an imported mesh keeps its own materials when none is given |
+| `--layer` | stacking order against garments (default 10, over every garment) |
+| `--hide-hair` | a band round the head presses the hair under it inward (default `true` on the `head` bone) |
+
+Built-ins: `circlet` (gold head band), `ring_earring_l` / `ring_earring_r` (gold hoops through the
+lobes, with one hang bone each), `bangle_l` / `bangle_r` (gold bangles on the forearms).
+
+```bash
+kankuro accessory add circlet
+kankuro accessory add crown --file crown.glb --bone head --material gold
+kankuro accessory add haar --file necklace.glb --bone spine_03 --hang 3 --fit chest --material gold
+kankuro accessory add bajuband_l --file armlet.glb --bone upperarm_l --fit wrap
+kankuro accessory set crown --offset 0,0,0.01 --rotate 0,0,5 --scale 1.05
+```
+
+Prints `{"accessory": {...}, "accessories": [...]}`; `list` adds the built-ins and fits.
+
+### prop
+
+An object held in the hand. It hangs from a socket bone (`prop_l` or `prop_r`, under `hand_l` /
+`hand_r`, with its Z axis along the palm normal), so engines can also attach other objects there.
+
+```
+kankuro prop add|set ID [--file MESH | --builtin NAME] [--hand l|r|both] [--anchor l|r]
+                  [--grip GRIP] [--grip-weight W] [--reach M]
+                  [--offset X,Y,Z] [--rotate X,Y,Z] [--scale S] [--material PRESET] [--color C] [--roughness R]
+kankuro prop remove ID
+kankuro prop list
+```
+
+| option | meaning |
+|---|---|
+| `--file` | a mesh modelled on the reference body, placed in the T-posed hand where it is held |
+| `--hand` | `r` (default), `l`, or `both` |
+| `--anchor` | with `both`: the hand that holds the prop (default `r`); the other hand reaches for it |
+| `--grip` | the finger pose ([grip](#grip)); default `power` |
+| `--grip-weight` | 0..1: how much the grip replaces the clip's own finger animation (default 1) |
+| `--reach` | with `both`: where the other hand holds, in metres along the prop from the grip towards the index finger (negative: towards the little finger) |
+| `--offset`, `--rotate`, `--scale` | placement in the hand, about the grip point |
+
+The grip is baked over the finger channels of every clip (`build` and `render --animation`). A
+**contact** grip curls each finger joint, knuckle first, until it touches the prop, so it fits any
+prop thickness. With `--hand both` the anchor hand is placed on the prop's hold point and the other
+arm follows it with IK; a clip where a hand can't reach within 1 cm is named in the output's
+`warnings`. `render --animation` also warns when the prop passes through the body
+(`penetration`).
+
+Built-ins: `handle` (a plain 3 cm cylinder: a tool grip or bucket handle), `staff`
+(a 1.3 m walking staff, a lathi), `flute` (a bansuri held to the mouth with both hands).
+
+![The staff on Idle, and the flute held to the mouth with both hands](images/attach/props.jpg)
+
+```bash
+kankuro prop add staff
+kankuro prop add bow --file bow.glb --hand l --grip power
+kankuro prop add flute --hand both --anchor r --grip flute
+kankuro prop set bow --offset 0,0.02,0 --rotate 0,90,0
+kankuro render --animation Walk --frame 0.3 --views front,side
+```
+
+Prints `{"prop": {...}, "props": [...]}`; `list` adds the built-ins and grips.
+
+### grip
+
+List the finger poses props use.
+
+```
+kankuro grip list
+```
+
+| grip | kind | for |
+|---|---|---|
+| `power` | contact | a full wrap round a handle, thumb over the fingers |
+| `staff` | contact | like `power`, for a long pole |
+| `hook` | contact | fingers hooked round a handle, thumb free (a bucket, a bag) |
+| `pinch` | contact | thumb and index pinch, other fingers loosely curled |
+| `flute` | contact | fingers laid lightly over a flute's holes, thumb under it |
+| `open`, `fist`, `point` | fixed | not for holding: a relaxed open hand, a closed fist, the index finger pointing |
+
+Prints `{"grips": {"<name>": {...}}}`.
+
+### bones
+
+Extra bone chains: tails, braids, ponytails, dangling ornaments. Each chain hangs from a standard
+bone; its bones are named `<id>_01`, `<id>_02`, ... from the root.
+
+```
+kankuro bones add|set ID [--parent BONE] [--count N] [--length M] [--taper T] [--curve up:F|down:F]
+                      [--radius R] [--color C] [--material PRESET] [--follow hair|none]
+                      [--stiffness K] [--damping D] [--gravity G] [--no-motion]
+kankuro bones remove ID
+kankuro bones list
+```
+
+| option | default | meaning |
+|---|---|---|
+| `--parent` | | the standard bone it hangs from (`pelvis` for a tail, `head` for a braid) |
+| `--count` | 6 | number of bones, 1..32 |
+| `--length` | 0.6 | total length in metres |
+| `--taper` | 0.5 | 0..1: how much shorter and thinner the bones get towards the tip |
+| `--curve` | | `up:F` or `down:F`: how far the chain bends along its length (1 = half a turn) |
+| `--radius` | 0 | gives the chain a tapered tube mesh of this radius (a tail); 0 = bones only |
+| `--color`, `--material` | hair colour | the tube's look |
+| `--follow hair` | | rebinds the hanging hair (a braid or ponytail) to the chain |
+| `--stiffness`, `--damping`, `--gravity` | 0.35, 0.25, 1.0 | the follow-through spring |
+| `--no-motion` | | keep the chain rigid in clips |
+
+`build` and `render --animation` bake **follow-through** into every clip: each chain is a damped
+spring that lags behind the body, sags with gravity and is kept out of the legs. A looping clip is
+run twice and its end blended into its start, so the result loops cleanly; the bake is
+deterministic. `--secondary-motion all|none|ID,ID` on `build` and `render` picks which chains get
+it (default all). Accessories with `--hang` use the same spring with stiffer settings.
+
+![A tail swinging through the Walk clip](images/attach/tail_walk.jpg)
+
+```bash
+kankuro bones add tail --parent pelvis --count 8 --length 0.9 --curve up:0.3 --taper 0.5 --radius 0.035
+kankuro bones add braid --parent head --count 5 --follow hair
+kankuro build --animations Idle_A,Walk --secondary-motion tail,braid
+```
+
+Prints `{"chain": {...}, "bones": ["tail_01", ...], "extra_bones": [...]}`. `list` also names the
+prop sockets and accessory hang bones the spec adds.
 
 ---
 
@@ -612,6 +842,7 @@ Preview PNGs, rendered with Cycles on the CPU. Use them to check the result visu
 kankuro render [--views V1,V2,...] [--focus full|upper|head]
                [--animation CLIP --frame F] [--expression EXPR]
                [--size PX] [--samples N] [--out DIR] [--prefix NAME]
+               [--secondary-motion all|none|IDS]
 ```
 
 | option | default | meaning |
@@ -625,6 +856,7 @@ kankuro render [--views V1,V2,...] [--focus full|upper|head]
 | `--samples` | 12 | Cycles samples; raise for cleaner images, lower for speed |
 | `--out` | `<project>/renders` | output folder |
 | `--prefix` | `render` (or `pose_<clip>`) | file name prefix |
+| `--secondary-motion` | `all` | with `--animation`: which [extra bone chains](#bones) get follow-through |
 
 Writes one PNG per view plus a combined `<prefix>_sheet.png`.
 
@@ -635,7 +867,9 @@ kankuro render --animation Jog --frame 0.3      # check how clothes deform mid-s
 kankuro render --focus head --expression surprise
 ```
 
-Prints `{"views": {"front": "<png>", ...}, "sheet": "<png>", "animation", "frame", "focus", "expression"?}`.
+Prints `{"views": {"front": "<png>", ...}, "sheet": "<png>", "animation", "frame", "focus", "expression"?, "warnings"?}`.
+With a [prop](#prop) in the hand, `warnings` names a pose where it passes through the body or a hand
+can't reach it.
 
 ### build
 
@@ -643,6 +877,7 @@ Build the character and export a rigged GLB.
 
 ```
 kankuro build [--out GLB] [--animations A,B,...|all] [--render] [--size PX] [--samples N]
+              [--secondary-motion all|none|IDS]
 ```
 
 | option | default | meaning |
@@ -651,10 +886,13 @@ kankuro build [--out GLB] [--animations A,B,...|all] [--render] [--size PX] [--s
 | `--animations` | the spec's `export.animations` | Mesh2Motion clips to bake in, comma-separated, or `all` (87 clips, a much bigger file) |
 | `--render` | | also render preview views (`renders/build_*.png`) |
 | `--size`, `--samples` | 512, 12 | for `--render` |
+| `--secondary-motion` | `all` | which [extra bone chains](#bones) get follow-through baked into the clips: `all`, `none`, or chain ids |
 
 The GLB has the body, eyes, hair, eyebrows and each garment as separate skinned meshes, one armature, PBR
 materials (garments get baked `baseColorTexture` and `normalTexture`), the requested clips, and
-the 52 ARKit facial blendshapes as morph targets on the body.
+the 52 ARKit facial blendshapes as morph targets on the body. [Accessories](#accessory),
+[props](#prop) and chain tubes are separate meshes named by their ids; their bones (prop sockets,
+chains, hang bones) are listed in the manifest's `skeleton.extra_bones`.
 
 #### Facial expressions
 
@@ -724,7 +962,8 @@ Rig any humanoid mesh to the Mesh2Motion skeleton. It doesn't need a project.
 
 ```
 kankuro autorig <mesh> --out GLB [--facing auto|-y|+y|-x|+x] [--animations A,B] [--render DIR]
-                [--method auto|heat|proximity]
+                [--method auto|heat|proximity] [--prop NAME[:HAND[:GRIP]] ...]
+                [--extra-chain ID:PART[:COUNT] ...]
 ```
 
 | option | default | meaning |
@@ -734,6 +973,8 @@ kankuro autorig <mesh> --out GLB [--facing auto|-y|+y|-x|+x] [--animations A,B] 
 | `--facing` | `auto` | which way the model faces (`-y`, `+y`, `-x`, `+x`); `auto` detects it from the feet |
 | `--animations` | | clips to bake in |
 | `--render` | | folder for check renders (front and side, at rest and posed) |
+| `--prop` | | put a [prop](#prop) in the hand: a built-in name or a mesh file (placed as on the reference body), optionally with the hand (`l`, `r`, `both`) and grip; repeatable |
+| `--extra-chain` | | an [extra bone chain](#bones) through a part of the file (a mesh object or vertex group name, e.g. a tail), with `COUNT` bones (default 6); the part is weighted to the chain and gets follow-through on the clips; repeatable |
 | `--method` | `auto` | skinning: `heat` (bone heat on the mesh), `proximity` (distance weights), `auto` tries heat, then heat on a welded copy and on voxel remeshes (fine to coarse) with weights copied back, then distance |
 
 What works: upright humanoids in T- or A-pose, dressed or not, realistic or cartoon proportions.
@@ -748,14 +989,21 @@ the output as `autorig.log`.
 
 ```bash
 kankuro autorig robot.glb --out robot_rigged.glb --animations Idle_A,Walk --render ./check
+kankuro autorig vanara.glb --out vanara.glb --extra-chain tail:Tail:8 --animations Walk
+kankuro autorig farmer.glb --out farmer.glb --prop staff --prop ./hoe.glb:l:power --animations Idle_A
 ```
+
+The chain's root hangs from the standard bone nearest the part's attached end. The output adds
+`extra_bones` and `warnings` (for example a two-hand prop a clip can't reach).
 
 ### validate
 
 Check a GLB against the Mesh2Motion human standard: bone names and hierarchy, rest orientations,
 T-pose, skin weights. Files that carry facial blendshapes are also checked for all 52 ARKit shapes
 (`arkit_blendshapes`, listing any `missing`) and for every morph weight resting at 0
-(`blendshapes_at_rest`; otherwise engines would show an expression by default).
+(`blendshapes_at_rest`; otherwise engines would show an expression by default). Bones beyond the
+standard ones pass only when each hangs under a standard bone; they are listed by parent in
+`extra_bones`.
 
 ```
 kankuro validate <glb>
@@ -817,7 +1065,7 @@ text, like `guide`.
 | `bad_path` | `set` on a path that can't be set | see the table under [set](#set) |
 | `bad_value` | wrong type or out of range | read `message` |
 | `bad_color` | not a hex colour or a known colour name | `#RRGGBB` or a name from [Colour names](#colour-names) |
-| `unknown_preset`, `unknown_macro`, `unknown_modifier`, `unknown_hair`, `unknown_garment`, `unknown_fabric`, `unknown_animation` | a name not in the catalog | `hint` lists valid names |
+| `unknown_preset`, `unknown_macro`, `unknown_modifier`, `unknown_hair`, `unknown_garment`, `unknown_fabric`, `unknown_material`, `unknown_animation` | a name not in the catalog | `hint` lists valid names |
 | `duplicate_garment` | a garment with that id exists | `--id <other>` or `garment set` |
 | `no_garment` | no garment with that id | `hint` lists current ids |
 | `custom_garment` | `template` on an imported garment | it keeps its own UVs |

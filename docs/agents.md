@@ -55,6 +55,10 @@ Keep renders cheap while iterating (`--size 384 --samples 8`) and raise them for
 | "smiling" / "surprised" portrait | `render --focus head --expression smile` (presets or ARKit weights like `jawOpen=0.5`) |
 | "wearing a turban" | `garment add turban`, `hair set buzz` (other styles poke through) |
 | "traditional Indian dress" | `garment add blouse` + `garment add saree`, or `kurta` + `churidar` + `dupatta`, or `dhoti` + `turban` |
+| "gold zari border", "gold armour" | `garment set saree --material-region border=gold_zari`, `garment set <id> --material bronze` (`catalog materials`) |
+| "a gold crown and earrings", "bangles" | `accessory add circlet`, `accessory add ring_earring_l` / `_r`, `accessory add bangle_l`; your own mesh: `accessory add <id> --file <mesh> --bone head --material gold` |
+| "holding a staff / sword / flute" | `prop add staff`, `prop add <id> --file <mesh> --hand r --grip power`, `prop add flute`; check `render --animation Walk` for `warnings` |
+| "a monkey tail", "a long braid that swings" | `bones add tail --parent pelvis --count 8 --length 0.9 --radius 0.035`, `bones add braid --parent head --count 5 --follow hair` |
 
 Age slider values: 0.1875 ≈ 10 years, 0.5 = 25, 0.75 ≈ 57, 1.0 = 90.
 
@@ -101,6 +105,8 @@ You can build rigged 3D characters with the `kankuro` CLI.
   and `kankuro face set <group.slider>=<-1..1>` (`kankuro face list`). Eyes: `kankuro eyes --color <name|#hex> tilt=..`.
   Eyebrows: `kankuro brows --preset <name> --color <name|#hex>`. Skin: `kankuro skin --color <name|#hex>`.
 - Hair: `kankuro hair set <style> --color "#hex"`. Clothes: `kankuro garment add <type> --color "#hex" [--fabric name]`.
+- Jewellery: `kankuro accessory add <built-in|id --file mesh --bone B>`. Held objects: `kankuro prop add <name>`.
+  Tails and swinging braids: `kankuro bones add <id> --parent <bone>`. The 65 standard bones never change.
 - After visible changes run `kankuro render` and look at renders/render_sheet.png. Use --focus head for faces.
 - Custom fabric prints: `kankuro template <id>`, get the image painted on that template outside kankuro,
   then `kankuro garment set <id> --texture <png>`.

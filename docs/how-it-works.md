@@ -40,7 +40,7 @@ Wear it over `blouse`. `tools/saree_texture.py MASK OUT` paints a simple silk sa
 without an image model (`examples/saree_silk.png`).
 
 Every garment also gets **fabric relief** baked into a normal map, so clothes don't look flat even
-with a plain colour. Each garment type has a default fabric (`catalog fabrics`: cotton, denim, knit,
+with a plain colour. Each garment type has a default fabric (`catalog fabrics`: cotton, jersey, denim, knit,
 canvas, leather, silk, spandex), and `--fabric NAME|none` overrides it. The relief combines the weave,
 hem and seam stitching along the outline, soft folds, and compression creases at the elbows, wrists,
 knees, ankles and waist (only where the cloth sits close to the body, so skirts and drapes stay smooth).
@@ -52,6 +52,15 @@ and a supplied `--normal` map (OpenGL / +Y green) is blended in. `--normal-stren
 The maps are written to `build/work/garment_<id>_albedo.jpg` and `_normal.jpg` and exported as glTF `baseColorTexture`
 and `normalTexture`. `export.texture_size` (default 2048) sets their resolution.
 [docs/codex-textures.md](codex-textures.md) has the exact image-model prompts and file specs.
+
+**Metal, gems and zari.** `--material PRESET` gives a whole garment a material preset (gold, bronze,
+steel, gem, pearl, lacquer...; `catalog materials`), and `--material-region border=gold_zari` puts a
+preset on part of the UV template: a band along the open edges (`border`, `hem`) measured on the
+unfolded cloth, or your own `--mask`. A region takes the preset's colour, metallic and roughness through
+a glTF metallic-roughness texture (`build/work/garment_<id>_mr.png`) and keeps the cloth's weave relief,
+folds and occlusion, so a zari border still reads as woven thread. `render` shows metal against a
+studio environment (bright ceiling, darker floor, two softbox strips) that only reflections see; the
+backdrop stays plain grey. [Materials](cli-reference.md#materials) has an image of every preset.
 
 The UV layout comes from a fixed reference body, so **one texture fits that garment on every body
 shape**. `kankuro template body` gives the skin layout (MakeHuman UVs) for `kankuro skin --texture`.
@@ -66,6 +75,27 @@ kankuro hair import --file braids.glb --color "#2a1a10"
 
 Imported meshes are moved onto the current body shape (a smooth displacement field from reference
 body to current body), skinned from nearby body weights, and pushed out of the skin.
+
+## Accessories, props and extra bones
+
+```bash
+kankuro accessory add circlet                  # rigid gold band on the head
+kankuro prop add staff                         # a staff in the right hand
+kankuro bones add tail --parent pelvis --count 8 --length 0.9 --radius 0.035
+```
+
+- **Accessories** are rigid and skinned to one bone. Their placement on the reference body is
+  carried onto each body shape with a best-fit similarity transform (rotation, translation, uniform
+  scale) of the body around that bone, then a fit settles them: slid along the bone until clear of
+  the skin, scaled radially round a limb, or settled onto the chest. A band on the head presses the
+  hair under it.
+- **Props** hang from socket bones `prop_l` / `prop_r` under the hands. A contact grip curls each
+  finger joint until it touches the prop, and the pose is baked over the finger channels of every
+  clip. A two-hand prop keeps the second hand on it with two-bone IK per frame.
+- **Extra bones** hang under a standard bone, so the 65 Mesh2Motion bones never change and every
+  clip still plays. On export each chain's follow-through is simulated per clip (a damped spring
+  with gravity, pushed out of capsules round the legs, run twice for a looping clip and blended
+  into its start) and baked as keys.
 
 ## Auto-rigging other meshes
 
@@ -92,6 +122,9 @@ separate below the knees; a long skirt or robe that hides the crotch fails with 
   many parts), heat runs on a welded copy, then on voxel remeshes from fine to coarse, and the
   weights are copied back by nearest surface point. Distance weights are the last resort. `skinning`
   reports what was tried and used.
+- **Extras.** `--extra-chain tail:Tail:8` runs a bone chain through a named part of the file (a
+  tail), hung from the nearest standard bone and weighted along it; `--prop staff` puts a prop in the
+  hand. Both get the same follow-through and grips as built characters.
 - **Output.** Mesh2Motion T-pose rest with exact bone orientations, so every Mesh2Motion clip plays
   unchanged; `validate` checks it.
 
