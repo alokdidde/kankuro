@@ -44,6 +44,21 @@ def fit_from_makehuman(coords):
     pos = {}
     for bone, (h, t) in mj["fit"].items():
         pos[bone] = [J[h].copy(), J[t].copy()]
+    # MakeHuman's foot bone ends mid-arch; the toes bend at the ball of the foot (the metatarsal heads,
+    # where the toe bones start), so that's where the ball pivot goes. The foot bone keeps its own
+    # direction (ankle to mid-arch): the T-pose alignment turns it to Mesh2Motion's foot, and a
+    # longer, flatter foot bone would tip the whole foot.
+    for s, S in (("l", "L"), ("r", "R")):
+        pos[f"ball_{s}"] = [ball_joint(J, S), J[f"toe3-3.{S}____tail"].copy()]  # to the middle toe's tip
+    return _finish(pos)
+
+
+def ball_joint(J, S):
+    """The ball of the foot: the mean of the five toe bases (MakeHuman toeN-1 heads)."""
+    return np.mean([J[f"toe{k}-1.{S}____head"] for k in range(1, 6)], axis=0)
+
+
+def _finish(pos):
     # Split MakeHuman's single head bone into head + head_leaf like Mesh2Motion.
     h, t = pos["head"]
     mid = h + (t - h) * 0.5

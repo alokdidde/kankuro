@@ -379,7 +379,8 @@ List them with `kankuro catalog expressions`; preview with `kankuro render --exp
               "method": "skinning: auto (heat, then fallbacks), heat, proximity"}),
     "validate": dict(
         summary="check a GLB against the Mesh2Motion human standard",
-        description="Checks bone names, hierarchy, rest orientations, T-pose and skin weights, and for files "
+        description="Checks bone names, hierarchy, rest orientations, T-pose, skin weights, the toe pivot "
+                    "(ball_at_toe_crease), and for files "
                     "with facial blendshapes that all 52 ARKit shapes are present (arkit_blendshapes) and rest "
                     "at weight 0 (blendshapes_at_rest). Any check with \"pass\": false says what is off.",
         examples="  kankuro validate build/hero.glb", args={"glb": "the GLB to check"}),

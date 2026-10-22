@@ -223,6 +223,15 @@ def _similarity(a0, a1, b0, b1):
             @ Matrix.Translation(-Vector(a0)))
 
 
+def _toe_reach(co, ankle, H):
+    """How far the toes reach forward (-Y) of the ankle: the foot below the ankle on its side."""
+    foot = co[(co[:, 2] < ankle[2]) & (np.abs(co[:, 0] - ankle[0]) < 0.06 * H)]
+    if not len(foot):
+        return None
+    r = float(ankle[1] - foot[:, 1].min())
+    return r if r > 0.02 * H else None
+
+
 ARM = ["clavicle", "upperarm", "lowerarm", "hand", "thumb", "index", "middle", "ring", "pinky"]
 LEG = ["thigh", "calf", "foot", "ball"]
 
@@ -285,6 +294,17 @@ def fit_skeleton(co, tmpl_co, tmpl_pos):
             out[name] = [np.array(M @ Vector(h)), np.array(M @ Vector(t))]
         else:
             out[name] = [spine_map(np.array(h)), spine_map(np.array(t))]
+    # feet: the leg map carries the template's foot length; scale the ball (toe) bones along each foot
+    # so the pivot lands on this mesh's ball of the foot whatever its foot length
+    for side in ("l", "r"):
+        t_ank, g_ank = np.array(tmpl_pos[f"foot_{side}"][0]), out[f"foot_{side}"][0]
+        t_reach, g_reach = _toe_reach(tmpl_co, t_ank, T["H"]), _toe_reach(co, g_ank, G["H"])
+        if not t_reach or not g_reach:
+            continue
+        c = g_reach / (t_reach * arm_maps["leg_" + side].to_scale()[0])
+        for name in (f"ball_{side}", f"ball_leaf_{side}"):
+            if name in out:
+                out[name] = [g_ank + (p - g_ank) * c for p in out[name]]
     # keep chains connected: child heads equal parent tails where the template had them equal
     for b in rig.m2m_rig():
         par = b["parent"]

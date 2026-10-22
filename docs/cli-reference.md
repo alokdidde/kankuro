@@ -1004,6 +1004,9 @@ T-pose, skin weights. Files that carry facial blendshapes are also checked for a
 (`blendshapes_at_rest`; otherwise engines would show an expression by default). Bones beyond the
 standard ones pass only when each hangs under a standard bone; they are listed by parent in
 `extra_bones`.
+`ball_at_toe_crease` checks that each `ball_*` bone (the toe pivot) is within 1.5 cm of where
+the skin hands over from the foot to the toes, so toes roll over the ball of the foot at push-off
+instead of kinking.
 
 ```
 kankuro validate <glb>
