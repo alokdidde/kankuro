@@ -43,9 +43,9 @@ def _hairline(theta, z_ref, z_top, style, nape=False):
     deg = abs(math.degrees(theta))
     if nape:
         # the ear sits at ~100-145 degrees: over its top, then down the back of its root to the lobe
-        f = np.interp(deg, [0, 18, 38, 58, 78, 95, 100, 106, 114, 128, 145, 160, 180],
+        f = np.interp(deg, [0, 18, 38, 58, 78, 90, 100, 108, 114, 128, 145, 160, 180],
                       [front - 0.015, front, front + temple, (front + side) / 2 + temple * 0.6,
-                       side - 0.04, side - 0.07, 0.36, 0.18, -0.02, -0.12, back + 0.1, back + 0.03, back])
+                       side - 0.04, side - 0.09, 0.32, 0.1, -0.02, -0.12, back + 0.1, back + 0.03, back])
     else:
         f = np.interp(deg, [0, 18, 38, 58, 78, 95, 130, 180],
                       [front - 0.015, front, front + temple, (front + side) / 2 + temple * 0.6,
@@ -54,15 +54,16 @@ def _hairline(theta, z_ref, z_top, style, nape=False):
 
 
 def ear_vertices(body_obj):
-    """Indices (into body_obj) of the outer ears, from the vertices MakeHuman's ear-placement target
-    moves rigidly. Hair grows up to the root of the ear but never onto it."""
+    """Indices (into body_obj) of the outer ears: the vertices MakeHuman's ear-placement target moves
+    rigidly (the ring that only partly follows is scalp). Hair grows up to the root of the ear but never
+    onto it."""
     from .. import morph
     t = morph.targets()
     ids = []
     for side in "lr":
         k = f"ears/{side}-ear-trans-backward"
         d = np.linalg.norm(t[k + "|d"].astype(float), axis=1)
-        ids.append(t[k + "|i"][d > 0.5 * d.max()])
+        ids.append(t[k + "|i"][d > 0.99 * d.max()])
     verts = np.asarray(body_obj["mh_verts"])
     return np.nonzero(np.isin(verts, np.concatenate(ids)))[0]
 
@@ -748,8 +749,10 @@ def make(res, body_obj, style_name):
                     bpy.ops.object.join()
     if cards:
         _trim_edge(obj, keep=covered)
-    # the base sits just under the card roots (and, at the tapered hairline, just under the skin)
-    garments.offset_along_normals(obj, -0.0008)
+    # the base sits just under the card roots (and, at the tapered hairline, just under the skin); without
+    # cards the base is the hair, so its tapered edge has to stay on top of the skin
+    if cards:
+        garments.offset_along_normals(obj, -0.0008)
     if ties:
         with bpy.context.temp_override(active_object=obj, selected_editable_objects=[obj] + ties, object=obj):
             bpy.ops.object.join()
