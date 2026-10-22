@@ -336,7 +336,7 @@ List them with `kankuro catalog expressions`; preview with `kankuro render --exp
   kankuro render --expression "jawOpen=0.6,eyeBlinkLeft=1"
   kankuro render --focus head --expression "smile,jawOpen=0.2"   # preset plus tweaks
   kankuro render --size 384 --samples 8            # faster while iterating""",
-        args={"views": "comma-separated: front, three_quarter, side, back (default all four)",
+        args={"views": "comma-separated: front, three_quarter, side, back_three_quarter, back (default front, three_quarter, side, back)",
               "focus": "full (default), upper, or head",
               "animation": "pose from a Mesh2Motion clip",
               "frame": "with --animation: 0..1 = fraction of the clip, >1 = frame number",

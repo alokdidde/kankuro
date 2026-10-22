@@ -10,6 +10,8 @@ from .. import catalog
 from . import garments, hair_cards, util
 
 HEAD_BONES = ["head", "neck_01", "spine_03", "spine_02"]
+# default hairline (front, side, back) in fractions of skull base -> crown; back is the nape, below the skull
+HAIRLINE = (0.74, 0.55, -0.36)
 
 
 def _head_frame(res, body_obj):
@@ -29,18 +31,41 @@ def _theta(p, yc):
     return math.atan2(p[0], -(p[1] - yc))
 
 
-def _hairline(theta, z_ref, z_top, style):
+def _hairline(theta, z_ref, z_top, style, nape=False):
     """Height of the hairline around the head (theta 0 at the face, +/-pi at the back).
 
     Not a plain arch: the centre dips a little, the hair recedes at the temples (the "M" of a real
-    hairline), comes down again in front of the ear and rises over it before dropping to the nape."""
-    front, side, back = style.get("hairline", (0.74, 0.55, 0.1))
+    hairline), comes down again in front of the ear and rises over it. With `nape` (hair, as opposed to
+    a turban's wrap line) it then drops down behind the ear to below the lobe and runs across the nape
+    of the neck below the skull, where `back` is negative (heights are fractions of skull base to crown)."""
+    front, side, back = style.get("hairline", HAIRLINE if nape else (0.74, 0.55, 0.1))
     temple = style.get("temple", 0.05)
     deg = abs(math.degrees(theta))
-    f = np.interp(deg, [0, 18, 38, 58, 78, 95, 130, 180],
-                  [front - 0.015, front, front + temple, (front + side) / 2 + temple * 0.6,
-                   side - 0.04, side, (side + back) / 2, back])
+    if nape:
+        # the ear sits at ~100-145 degrees: over its top, then down the back of its root to the lobe
+        f = np.interp(deg, [0, 18, 38, 58, 78, 90, 100, 108, 114, 128, 145, 160, 180],
+                      [front - 0.015, front, front + temple, (front + side) / 2 + temple * 0.6,
+                       side - 0.04, side - 0.09, 0.32, 0.1, -0.02, -0.12, back + 0.1, back + 0.03, back])
+    else:
+        f = np.interp(deg, [0, 18, 38, 58, 78, 95, 130, 180],
+                      [front - 0.015, front, front + temple, (front + side) / 2 + temple * 0.6,
+                       side - 0.04, side, (side + back) / 2, back])
     return z_ref + (z_top - z_ref) * float(f)
+
+
+def ear_vertices(body_obj):
+    """Indices (into body_obj) of the outer ears: the vertices MakeHuman's ear-placement target moves
+    rigidly (the ring that only partly follows is scalp). Hair grows up to the root of the ear but never
+    onto it."""
+    from .. import morph
+    t = morph.targets()
+    ids = []
+    for side in "lr":
+        k = f"ears/{side}-ear-trans-backward"
+        d = np.linalg.norm(t[k + "|d"].astype(float), axis=1)
+        ids.append(t[k + "|i"][d > 0.99 * d.max()])
+    verts = np.asarray(body_obj["mh_verts"])
+    return np.nonzero(np.isin(verts, np.concatenate(ids)))[0]
 
 
 def coverage_mask(res, hair_obj, smooth=2):
@@ -65,7 +90,12 @@ def coverage_mask(res, hair_obj, smooth=2):
         edges += [(f[k], f[(k + 1) % len(f)]) for k in range(len(f))]
     nrm /= np.linalg.norm(nrm, axis=1, keepdims=True) + 1e-12
     m = np.zeros(len(co))
-    head = (res.W[:, res.bones.index("head")] > 0.5) & (np.abs(nrm).sum(1) > 0)  # not the shoulders under long hair
+    wh, wn = res.W[:, res.bones.index("head")], res.W[:, res.bones.index("neck_01")]
+    yc = co[wh > 0.5, 1].mean()
+    # the head, and the nape behind the ears (not the shoulders or the sides of the neck under long hair)
+    nape = (wh + wn > 0.5) & (co[:, 2] > res.arm.data.bones["head"].head_local.z - 0.07) & \
+        (np.abs(np.arctan2(co[:, 0], -(co[:, 1] - yc))) > math.radians(110))
+    head = ((wh > 0.5) | nape) & (np.abs(nrm).sum(1) > 0)
     for i in np.nonzero(head)[0]:
         n = Vector(nrm[i])
         hit = bvh.ray_cast(Vector(co[i]) - n * 0.002, n, 0.06)
@@ -81,13 +111,17 @@ def coverage_mask(res, hair_obj, smooth=2):
 
 
 def _cap(res, body_obj, style, name):
+    from mathutils.bvhtree import BVHTree
     co, W, head_v, z_ref, z_top, yc = _head_frame(res, body_obj)
+    co, _, ear_poly, polys = _earless(body_obj, co)
     ok = np.zeros(len(co), dtype=bool)
-    hv = set(head_v.tolist())
     crest = style.get("crest")
-    for i in head_v:
+    # the nape is skinned to the neck: take the head and the back of the neck (with the ears laid flat;
+    # they are cut out once the cap has been smoothed, so the hair comes right up to them)
+    scalp = (W[:, res.bones.index("head")] + W[:, res.bones.index("neck_01")]) > 0.5
+    for i in np.nonzero(scalp)[0]:
         p = co[i]
-        if p[2] > _hairline(_theta(p, yc), z_ref, z_top, style):
+        if p[2] > _hairline(_theta(p, yc), z_ref, z_top, style, nape=True):
             ok[i] = True
     me = body_obj.data
     faces = [list(p.vertices) for p in me.polygons if all(ok[v] for v in p.vertices)]
@@ -117,7 +151,7 @@ def _cap(res, body_obj, style, name):
     sm.factor = 1.0
     sm.iterations = 8
     garments.apply_modifier(obj, sm)
-    bvh = garments.body_bvh(body_obj)
+    bvh = BVHTree.FromPolygons([Vector(p) for p in co], polys)
     garments.offset_along_normals(obj, style["offset"])
     if style.get("round"):
         co2 = util.get_coords(obj)
@@ -130,6 +164,8 @@ def _cap(res, body_obj, style, name):
         co2 = c + (co2 - c) * ((1 - k) + k * target / r)[:, None]
         util.set_coords(obj, co2)
     garments.conform(obj, bvh, style["offset"] * 0.9)
+    _hug_nape(obj, bvh, style["offset"], z_ref, z_top)
+    _cut_ears(obj, bvh, ear_poly)
     if crest:
         co2 = util.get_coords(obj)
         k = np.clip(1 - (co2[:, 0] / crest) ** 2, 0, 1)
@@ -139,6 +175,69 @@ def _cap(res, body_obj, style, name):
         co2 += n.reshape(-1, 3) * (0.05 * k)[:, None]
         util.set_coords(obj, co2)
     return obj, (yc, z_ref, z_top)
+
+
+def _hug_nape(obj, bvh, offset, z_ref, z_top):
+    """Smoothing bridges the hollow under the skull; lay the hair back onto the neck there, so it ends
+    flat on the nape instead of standing off it like a helmet rim."""
+    co = util.get_coords(obj)
+    hh = z_top - z_ref
+    k = np.clip((z_ref + 0.25 * hh - co[:, 2]) / (0.3 * hh), 0, 1)
+    for i in np.nonzero(k > 0)[0]:
+        loc, nrm, _, _ = bvh.find_nearest(Vector(co[i]))
+        if loc is None:
+            continue
+        h = (Vector(co[i]) - loc).dot(nrm)
+        cap = offset + 0.002 + (1 - k[i]) * 0.02
+        if h > cap:
+            co[i] = np.array(Vector(co[i]) - nrm * (h - cap))
+    util.set_coords(obj, co)
+
+
+def _earless(body_obj, co):
+    """Body coordinates with each outer ear collapsed onto its root (a smooth patch over the skull), and
+    a per-face flag for that patch. The hair cap is built over this so that it neither tents out over
+    the ears nor gets pulled back from them by the smoothing; the patch is cut out afterwards."""
+    ear = np.zeros(len(co), dtype=bool)
+    ear[ear_vertices(body_obj)] = True
+    polys = [list(p.vertices) for p in body_obj.data.polygons]
+    edges = np.array([(f[k], f[(k + 1) % len(f)]) for f in polys for k in range(len(f))])
+    edges = edges[ear[edges[:, 0]] | ear[edges[:, 1]]]
+    flat = co.copy()
+    deg = np.bincount(edges.ravel(), minlength=len(co)).astype(float)
+    for _ in range(300):  # membrane fill, held by the skin round the ear's root
+        acc = np.zeros_like(flat)
+        np.add.at(acc, edges[:, 0], flat[edges[:, 1]])
+        np.add.at(acc, edges[:, 1], flat[edges[:, 0]])
+        flat[ear] = acc[ear] / deg[ear][:, None]
+    return flat, ear, np.array([ear[f].all() for f in polys]), polys
+
+
+def _cut_ears(obj, flat_bvh, ear_poly):
+    """Open the cap where it lies over an ear's root patch, so the hair ends right at the ear."""
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    kill = []
+    for f in bm.faces:
+        hit = flat_bvh.find_nearest(f.calc_center_median())
+        if hit[0] is not None and ear_poly[hit[2]]:
+            kill.append(f)
+    edge = {v for f in kill for v in f.verts}
+    bmesh.ops.delete(bm, geom=kill, context="FACES")
+    garments._largest_components(bm, min_frac=0.2)
+    # the cut follows the faces: round off its stair-steps (only along the new edge)
+    for _ in range(6):
+        new = {}
+        for v in edge:
+            if not v.is_valid or not v.is_boundary:
+                continue
+            nb = [e.other_vert(v) for e in v.link_edges if e.is_boundary]
+            if len(nb) == 2:
+                new[v] = v.co * 0.5 + (nb[0].co + nb[1].co) * 0.25
+        for v, c in new.items():
+            v.co = c
+    bm.to_mesh(obj.data)
+    bm.free()
 
 
 def _curtain(res, body_obj, style, yc, z_ref, z_top, name="hair_curtain"):
@@ -161,7 +260,7 @@ def _curtain(res, body_obj, style, yc, z_ref, z_top, name="hair_curtain"):
     step = 0.012
     z_bot = z_ref + 0.03 - length
     # start high on the head so the sheet overlaps the cap (no gaps at the back of the head)
-    z_tops = np.array([max(_hairline(t, z_ref, z_top, style) + 0.035, z_ref + 0.62 * (z_top - z_ref))
+    z_tops = np.array([max(_hairline(t, z_ref, z_top, style, nape=True) + 0.035, z_ref + 0.62 * (z_top - z_ref))
                        for t in thetas])
     z_hi = z_tops.max()
     rows = int(math.ceil((z_hi - z_bot) / step)) + 1
@@ -650,8 +749,10 @@ def make(res, body_obj, style_name):
                     bpy.ops.object.join()
     if cards:
         _trim_edge(obj, keep=covered)
-    # the base sits just under the card roots (and, at the tapered hairline, just under the skin)
-    garments.offset_along_normals(obj, -0.0008)
+    # the base sits just under the card roots (and, at the tapered hairline, just under the skin); without
+    # cards the base is the hair, so its tapered edge has to stay on top of the skin
+    if cards:
+        garments.offset_along_normals(obj, -0.0008)
     if ties:
         with bpy.context.temp_override(active_object=obj, selected_editable_objects=[obj] + ties, object=obj):
             bpy.ops.object.join()

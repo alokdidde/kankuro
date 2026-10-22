@@ -151,7 +151,15 @@ class Accessories(unittest.TestCase):
         rin, rout = np.array([x.min() for x in near]), np.array([x.max() for x in near])
         r = np.linalg.norm(rh[band], axis=1)
         self.assertEqual((r > rout).sum(), 0)          # no hair shows through or over the band
-        self.assertLess((r - rin).max(), 0.002)        # at most 2 mm into its thickness (kept off the scalp)
+        # at most 2 mm into its thickness, except where the band rests on the scalp itself (just above the
+        # ear): there the hair is pressed flat, as close to the skin as squeeze_hair goes (1.5 mm)
+        deep = (r - rin) >= 0.002
+        if deep.any():
+            from mathutils import Vector
+            from kankuro.blender import garments
+            bvh = garments.body_bvh(b.body)
+            skin = np.array([bvh.find_nearest(Vector(q))[3] for q in hair[band][deep]])
+            self.assertLess(skin.max(), 0.0016)
         # posed on Walk, the circlet keeps its shape exactly
         build.pose_clip(b, "Walk", 0.3)
         posed = util.get_coords(m["circlet"], evaluated=True)

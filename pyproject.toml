@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kankuro"
-version = "0.3.1"
+version = "0.3.2"
 description = "Agent-friendly character creator CLI: MakeHuman body + Mesh2Motion skeleton, built with Blender (bpy)"
 readme = "README.md"
 license = "MIT"

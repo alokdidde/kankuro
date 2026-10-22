@@ -10,6 +10,7 @@ VIEWS = {
     "front": 0.0,
     "three_quarter": 35.0,
     "side": 90.0,
+    "back_three_quarter": 145.0,
     "back": 180.0,
 }
 
