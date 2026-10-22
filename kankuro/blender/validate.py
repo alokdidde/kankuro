@@ -70,6 +70,10 @@ def check(path):
                 bad_w += 1
     add("weights_normalised", bad_w == 0, {"vertices": total, "bad": bad_w})
     add("max_4_influences", max_inf <= 4, {"max": max_inf})
+    crease = _ball_at_crease(arm, skinned)
+    if crease:
+        add("ball_at_toe_crease", all(abs(v) <= 0.015 for v in crease.values()),
+            {"cm_from_crease": {k: round(v * 100, 1) for k, v in crease.items()}})
     if meshes:
         co = np.concatenate([util.get_coords(o) @ np.array(o.matrix_world)[:3, :3].T + np.array(o.matrix_world)[:3, 3]
                              for o in meshes])
@@ -87,3 +91,49 @@ def check(path):
         add("blendshapes_at_rest", not on, {"nonzero_default_weights": on[:10], "count": len(on)})
     acts = [a.name for a in bpy.data.actions]
     return {"glb": path, "valid": all(c["pass"] for c in checks), "checks": checks, "animations": acts}
+
+
+def _ball_at_crease(arm, meshes):
+    """For each foot, how far (m, + = towards the toes) the ball bone's head is from where the skin
+    hands over from foot to ball (ball share of the foot+ball weight crossing 0.5). The toes bend
+    there, so a pivot far from it kinks and pinches the toes at push-off. {} when nothing is weighted
+    to the ball bones."""
+    mw = arm.matrix_world
+    out = {}
+    for s in ("l", "r"):
+        fn, bn = f"foot_{s}", f"ball_{s}"
+        if fn not in arm.data.bones or bn not in arm.data.bones:
+            continue
+        b = arm.data.bones[bn]
+        head = np.array(mw @ b.head_local)
+        fwd = np.array((mw.to_3x3() @ (b.tail_local - b.head_local)))
+        fwd[2] = 0.0
+        if np.linalg.norm(fwd) < 1e-6:
+            continue
+        fwd /= np.linalg.norm(fwd)
+        d_all, f_all = [], []
+        for o in meshes:
+            gi = {g.index: g.name for g in o.vertex_groups}
+            if fn not in gi.values() and bn not in gi.values():
+                continue
+            M = np.array(o.matrix_world)
+            for v in o.data.vertices:
+                wf = wb = 0.0
+                for g in v.groups:
+                    n = gi.get(g.group)
+                    if n == fn:
+                        wf = g.weight
+                    elif n == bn:
+                        wb = g.weight
+                if wf + wb > 0.5:
+                    p = M[:3, :3] @ np.array(v.co) + M[:3, 3]
+                    d_all.append(float((p - head) @ fwd))
+                    f_all.append(wb / (wf + wb))
+        d, f = np.array(d_all), np.array(f_all)
+        if not len(d) or f.max() < 0.5:
+            continue
+        mid = (f > 0.2) & (f < 0.8)
+        # where the blend is, or for a hard step, where the toe weights begin
+        crease = float(np.median(d[mid])) if mid.sum() >= 3 else float(d[f >= 0.5].min())
+        out[s] = -crease
+    return out

@@ -49,6 +49,31 @@ def _complete_weights(W, co):
     return W / s
 
 
+def soften_toe_crease(W, co, pos, half=0.12):
+    """Blend foot -> ball weights smoothly across the ball of the foot.
+
+    MakeHuman hands the toes over from foot to toe bones within about 2 cm, so a 25-35 degree toe-off
+    folds the skin sharply. Here the foot+ball weight of each vertex is split by a smoothstep of its
+    distance ahead of the ball pivot, over `half` x (ankle to toe tip) on each side (about 2.5 cm)."""
+    names = rig.deform_bone_names()
+    for s in ("l", "r"):
+        fi, bi = names.index(f"foot_{s}"), names.index(f"ball_{s}")
+        ankle, ball = np.asarray(pos[f"foot_{s}"][0]), np.asarray(pos[f"ball_{s}"][0])
+        fwd = ball - ankle
+        fwd[2] = 0.0
+        fwd /= np.linalg.norm(fwd)
+        tot = W[:, fi] + W[:, bi]
+        sel = tot > 1e-6
+        d = (co[sel] - ball) @ fwd
+        reach = float(d.max())                       # ball to toe tip
+        w = half * (np.linalg.norm((ball - ankle)[:2]) + reach)
+        x = np.clip((d + w) / (2 * w), 0.0, 1.0)
+        t = x * x * (3 - 2 * x)
+        W[sel, bi] = tot[sel] * t
+        W[sel, fi] = tot[sel] * (1 - t)
+    return W
+
+
 class BodyResult:
     """Everything later stages need: the T-posed armature, T-posed coords of every base vertex, weights."""
 
@@ -67,7 +92,8 @@ def build(macros=None, modifiers=None, height_cm=None, face_keys=()):
     if height_cm:
         h = co[body, 2].max()
         co *= (float(height_cm) / 100.0) / h
-    W = _complete_weights(base_weight_matrix().copy(), co)
+    pos = rig.fit_from_makehuman(co)
+    W = soften_toe_crease(_complete_weights(base_weight_matrix().copy(), co), co, pos)
 
     # A temporary mesh with every base vertex (body + helpers) rides along the T-pose conversion
     b = morph.base()
@@ -86,7 +112,7 @@ def build(macros=None, modifiers=None, height_cm=None, face_keys=()):
             kb.value = 0.0  # bpy 5.2 starts new keys at 1.0
             kb.data.foreach_set("co", (co + d).ravel())
 
-    arm = rig.create_armature(rig.fit_from_makehuman(co))
+    arm = rig.create_armature(pos)
     util.add_armature_modifier(tmp, arm)
     rig.pose_to_tpose(arm)
     rig.apply_pose_as_rest(arm, [tmp])
