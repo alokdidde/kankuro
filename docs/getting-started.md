@@ -1,7 +1,7 @@
 # Getting started
 
 This walks through making one character from scratch: body, face, hair, clothes, a custom
-texture, previews, and a rigged GLB with animations. It takes about ten minutes. Install kankuro
+texture, previews, and a rigged GLB with animations. It takes about ten minutes. Install sasori
 first ([installation.md](installation.md)).
 
 Every command prints one JSON object. The snippets below show only the parts that matter.
@@ -9,13 +9,13 @@ Every command prints one JSON object. The snippets below show only the parts tha
 ## 1. Create a project
 
 ```bash
-kankuro init ./mira --preset athletic_female --name Mira
+sasori init ./mira --preset athletic_female --name Mira
 cd mira
 ```
 
 The project is the folder. Everything about the character lives in `mira/character.json`, and every
 file you add is copied into `mira/assets/`. Inside the folder you don't need `-p`; from elsewhere,
-use `kankuro -p ./mira <command>` or set `KANKURO_PROJECT=./mira`.
+use `sasori -p ./mira <command>` or set `SASORI_PROJECT=./mira`.
 
 Presets are just starting slider values: `neutral`, `female`, `male`, `athletic_female`,
 `athletic_male`, `heavy_male`, `child`, `elder_female`, `elder_male`.
@@ -25,19 +25,19 @@ Presets are just starting slider values: `neutral`, `female`, `male`, `athletic_
 Body sliders run from 0 to 1:
 
 ```bash
-kankuro set body.macros.age=0.45 body.macros.weight=0.45 body.macros.muscle=0.6 \
+sasori set body.macros.age=0.45 body.macros.weight=0.45 body.macros.muscle=0.6 \
             body.macros.asian=0.7 body.macros.caucasian=0.3 body.macros.african=0
-kankuro set body.height_cm=168
+sasori set body.height_cm=168
 ```
 
 `body.height_cm` sets an exact height after the sliders. See all sliders with
-`kankuro catalog body_sliders`.
+`sasori catalog body_sliders`.
 
 For finer control there are 238 detailed morphs:
 
 ```bash
-kankuro morphs --group nose                       # what's there
-kankuro set "body.morphs.nose/nose-scale-horiz-decr|incr=-0.3" \
+sasori morphs --group nose                       # what's there
+sasori set "body.morphs.nose/nose-scale-horiz-decr|incr=-0.3" \
             "body.morphs.chin/chin-prominent-decr|incr=0.2"
 ```
 
@@ -46,15 +46,15 @@ Quote morph names: they contain `|`, which shells treat as a pipe.
 ## 3. Skin and eyes
 
 ```bash
-kankuro skin --color "#c68e6b" --brow-color "#2a1a12"
-kankuro set eyes.iris_color=#4a3020
+sasori skin --color "#c68e6b" --brow-color "#2a1a12"
+sasori set eyes.iris_color=#4a3020
 ```
 
 ## 4. Hair
 
 ```bash
-kankuro catalog hair_styles
-kankuro hair set ponytail --color "#1e1410"
+sasori catalog hair_styles
+sasori hair set ponytail --color "#1e1410"
 ```
 
 Hair is grown from the current scalp, so it fits whatever head shape you made.
@@ -62,27 +62,27 @@ Hair is grown from the current scalp, so it fits whatever head shape you made.
 ## 5. Clothes
 
 ```bash
-kankuro garment add tanktop --color "#f2efe8"
-kankuro garment add jacket --color "#3d5a40"
-kankuro garment add pants --color "#2b2b33"
-kankuro garment add boots
+sasori garment add tanktop --color "#f2efe8"
+sasori garment add jacket --color "#3d5a40"
+sasori garment add pants --color "#2b2b33"
+sasori garment add boots
 ```
 
 Each garment has a slot (`top`, `bottom`, `outer`, `feet`, ...). Adding a second `bottom`
 replaces the first, and the output tells you in `replaced`. Use `--keep-slot` to layer two things
-in one slot. `kankuro catalog garments` lists every type.
+in one slot. `sasori catalog garments` lists every type.
 
 Each garment also gets a fabric preset (`denim` for pants, `canvas` for the jacket, ...) that bakes
 weave, stitching and soft folds into a normal map, so even plain colours look like cloth:
 
 ```bash
-kankuro garment set jacket --fabric denim
+sasori garment set jacket --fabric denim
 ```
 
 ## 6. Look at it
 
 ```bash
-kankuro render
+sasori render
 ```
 
 ```json
@@ -93,9 +93,9 @@ kankuro render
 Open `renders/render_sheet.png`. It shows front, three-quarter, side and back. Closer looks:
 
 ```bash
-kankuro render --focus head --views front,three_quarter    # face and hair
-kankuro render --animation Jog --frame 0.3                 # clothes mid-stride
-kankuro render --focus head --expression smile             # ARKit facial blendshapes
+sasori render --focus head --views front,three_quarter    # face and hair
+sasori render --animation Jog --frame 0.3                 # clothes mid-stride
+sasori render --focus head --expression smile             # ARKit facial blendshapes
 ```
 
 Change things and render again until it looks right. Most iterations are a `set` or `garment set`
@@ -103,11 +103,11 @@ followed by a `render`.
 
 ## 7. Give the jacket a custom texture
 
-kankuro never generates images itself. It gives you a template, you (or an image model) paint on
+sasori never generates images itself. It gives you a template, you (or an image model) paint on
 it, and you pass the result back in.
 
 ```bash
-kankuro template jacket
+sasori template jacket
 # -> templates/jacket_template.png, templates/jacket_mask.png
 ```
 
@@ -115,9 +115,9 @@ The template is a flat sketch of the jacket: the left half is the front, the rig
 seen from behind. Paint the design over it at the same size, keeping it inside the grey shape. Then:
 
 ```bash
-kankuro garment set jacket --texture ./bomber_olive.png
-kankuro garment set jacket --height ./bomber_olive_height.png   # optional relief, white = raised
-kankuro render --views front,back
+sasori garment set jacket --texture ./bomber_olive.png
+sasori garment set jacket --height ./bomber_olive_height.png   # optional relief, white = raised
+sasori render --views front,back
 ```
 
 The texture fits the jacket on **any** body shape, because the UV layout comes from a fixed
@@ -126,9 +126,9 @@ reference body. [codex-textures.md](codex-textures.md) has copy-paste prompts fo
 ## 8. Build the GLB
 
 ```bash
-kankuro animations                          # 87 Mesh2Motion clips
-kankuro build --animations Idle_A,Walk,Jog
-kankuro validate build/Mira.glb
+sasori animations                          # 87 Mesh2Motion clips
+sasori build --animations Idle_A,Walk,Jog
+sasori validate build/Mira.glb
 ```
 
 ```json
@@ -145,7 +145,7 @@ plays on it unchanged, and it retargets cleanly to Unreal-style humanoid rigs.
 `autorig` puts the same skeleton on any humanoid mesh, no project needed:
 
 ```bash
-kankuro autorig ~/models/knight.glb --out knight_rigged.glb --animations Idle_A,Walk --render ./knight_check
+sasori autorig ~/models/knight.glb --out knight_rigged.glb --animations Idle_A,Walk --render ./knight_check
 ```
 
 Look at `knight_check/` to see it posed. Limbs should bend at the joints.
@@ -154,5 +154,5 @@ Look at `knight_check/` to see it posed. Limbs should bend at the joints.
 
 * [cli-reference.md](cli-reference.md): every command and option
 * [character-spec.md](character-spec.md): editing `character.json` directly
-* [agents.md](agents.md): driving kankuro from an AI agent
+* [agents.md](agents.md): driving sasori from an AI agent
 * [codex-textures.md](codex-textures.md): image-model prompts for garment textures

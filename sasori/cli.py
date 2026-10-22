@@ -1,4 +1,4 @@
-"""kankuro: a JSON-speaking character creator CLI for AI agents.
+"""sasori: a JSON-speaking character creator CLI for AI agents.
 
 Every command prints exactly one JSON object on stdout:
   {"ok": true, "command": "...", ...}             on success (exit code 0)
@@ -15,17 +15,17 @@ import traceback
 from . import appearance, catalog, morph, spec as specmod
 from .errors import CliError
 
-VERSION = "0.3.2"
+VERSION = "0.4.0"
 
 
 def emit(obj, code=0):
-    sys.stdout.write(json.dumps(obj, indent=None if os.environ.get("KANKURO_COMPACT") else 2, default=str) + "\n")
+    sys.stdout.write(json.dumps(obj, indent=None if os.environ.get("SASORI_COMPACT") else 2, default=str) + "\n")
     sys.stdout.flush()
     return code
 
 
 def _project(a):
-    return os.path.abspath(a.project or os.environ.get("KANKURO_PROJECT") or ".")
+    return os.path.abspath(a.project or os.environ.get("SASORI_PROJECT") or ".")
 
 
 def _log(project):
@@ -79,25 +79,25 @@ def cmd_catalog(a):
         "hair_styles": {k: v["desc"] for k, v in catalog.HAIR_STYLES.items()},
         "garments": {k: {"desc": v["desc"], "slot": v["slot"], "layer": v["layer"], "fabric": v.get("fabric")}
                      for k, v in catalog.GARMENTS.items()},
-        "fabrics": {k: v["desc"] for k, v in __import__("kankuro.fabric", fromlist=["FABRICS"]).FABRICS.items()},
-        "materials": {"presets": __import__("kankuro.matlib", fromlist=["summary"]).summary(),
+        "fabrics": {k: v["desc"] for k, v in __import__("sasori.fabric", fromlist=["FABRICS"]).FABRICS.items()},
+        "materials": {"presets": __import__("sasori.matlib", fromlist=["summary"]).summary(),
                       "regions": {"border": "band along every open edge (hems, neckline, cuffs, a saree's long "
                                             "edges), not the sewn seams",
                                   "hem": "band along the lowest open edges only",
                                   "<name> --mask PNG": "your own mask on the garment's UV template (white = in)"},
-                      "usage": "kankuro garment set saree --material-region border=gold_zari  |  "
-                               "kankuro garment import --file armour.glb --id kavach --material bronze"},
+                      "usage": "sasori garment set saree --material-region border=gold_zari  |  "
+                               "sasori garment import --file armour.glb --id kavach --material bronze"},
         "face_sliders": {k: {"range": r, "desc": d} for k, (d, _, r) in appearance.FACE_SLIDERS.items()},
         "face_presets": {k: v["desc"] for k, v in appearance.FACE_PRESETS.items()},
         "colors": {"skin": appearance.SKIN_TONES, "hair": appearance.HAIR_COLORS, "eyes": appearance.EYE_COLORS,
                    "usage": "any colour option takes #RRGGBB or one of these names"},
         "brows": {"keys": {k: {"default": d, "range": r, "desc": desc} for k, (d, r, desc) in appearance.BROW_KEYS.items()},
                   "presets": appearance.BROW_PRESETS},
-        "detail_morphs": f"{len(morph.modifier_catalog())} modifiers; list with `kankuro morphs`",
-        "animations": "list with `kankuro animations`",
-        "expressions": {"blendshapes": __import__("kankuro.face", fromlist=["ARKIT_NAMES"]).ARKIT_NAMES,
-                        "presets": list(__import__("kankuro.face", fromlist=["PRESETS"]).PRESETS),
-                        "usage": "kankuro render --focus head --expression smile  (or jawOpen=0.6,eyeBlinkLeft=1)"},
+        "detail_morphs": f"{len(morph.modifier_catalog())} modifiers; list with `sasori morphs`",
+        "animations": "list with `sasori animations`",
+        "expressions": {"blendshapes": __import__("sasori.face", fromlist=["ARKIT_NAMES"]).ARKIT_NAMES,
+                        "presets": list(__import__("sasori.face", fromlist=["PRESETS"]).PRESETS),
+                        "usage": "sasori render --focus head --expression smile  (or jawOpen=0.6,eyeBlinkLeft=1)"},
     }
     if a.section:
         if a.section not in out:
@@ -117,7 +117,7 @@ def cmd_morphs(a):
         items.append({"name": name, "group": c["group"], "range": c["range"]})
     groups = sorted({c["group"] for c in cat.values()})
     return {"count": len(items), "groups": groups, "modifiers": items,
-            "usage": "kankuro set body.morphs.<name>=<value>  (e.g. body.morphs.nose/nose-scale-horiz-decr|incr=0.4)"}
+            "usage": "sasori set body.morphs.<name>=<value>  (e.g. body.morphs.nose/nose-scale-horiz-decr|incr=0.4)"}
 
 
 def cmd_hair(a):
@@ -561,10 +561,10 @@ def cmd_render(a):
         if expr is None:
             raise CliError("bad_expression", f"Unknown expression or blendshape '{bad_name}'",
                            hint=f"Presets: {', '.join(face.PRESETS)}; or ARKit names with weights, e.g. "
-                                "jawOpen=0.6,mouthSmileLeft=1 (list them with `kankuro catalog expressions`)")
+                                "jawOpen=0.6,mouthSmileLeft=1 (list them with `sasori catalog expressions`)")
         if s.get("face", {}).get("blendshapes", "arkit52") == "none":
             raise CliError("no_blendshapes", "This character is built without facial blendshapes",
-                           hint="kankuro set face.blendshapes=arkit52")
+                           hint="sasori set face.blendshapes=arkit52")
     with util.quiet(_log(p)):
         b = build.build_scene(s, p, work)
         if expr:
@@ -630,10 +630,10 @@ def cmd_template(a):
             mask = os.path.join(out_dir, f"{gid}_mask.png")
             info = b.uv_info.get(gid, {})
             if info.get("labels"):
-                textures.uv_template(garments.uv_polygons(m), path, f"kankuro {gid} UV template ({info['layout']})",
+                textures.uv_template(garments.uv_polygons(m), path, f"sasori {gid} UV template ({info['layout']})",
                                      size=a.size, mask_out=mask, labels=info["labels"], divider=False)
             else:
-                textures.uv_template(garments.uv_polygons(m), path, f"kankuro {gid} UV template - left: front view, right: back view (seen from behind)",
+                textures.uv_template(garments.uv_polygons(m), path, f"sasori {gid} UV template - left: front view, right: back view (seen from behind)",
                                      size=a.size, mask_out=mask)
             results[gid] = {"template": path, "mask": mask, "layout": info.get("layout", "front_back_flat_sketch"),
                             "size": a.size}
@@ -653,14 +653,14 @@ def cmd_template(a):
         polys = [[tuple(uvs[i]) for i in fu] for fu in fuvs]
         path = os.path.join(out_dir, "body_template.png")
         mask = os.path.join(out_dir, "body_mask.png")
-        textures.uv_template(polys, path, "kankuro body skin UV template (MakeHuman UV layout)", size=a.size,
+        textures.uv_template(polys, path, "sasori body skin UV template (MakeHuman UV layout)", size=a.size,
                              labels=(), mask_out=mask)
         results["body"] = {"template": path, "mask": mask, "layout": "makehuman_body"}
     return {"templates": results,
             "how_to_retexture": "Paint/generate a same-size image over the template (keep the garment inside the "
                                 "grey area; the mask is white where pixels are used), then run "
-                                "`kankuro garment set <id> --texture <png>` (or `kankuro set skin.texture` via "
-                                "`kankuro skin --texture <png>` for the body)."}
+                                "`sasori garment set <id> --texture <png>` (or `sasori set skin.texture` via "
+                                "`sasori skin --texture <png>` for the body)."}
 
 
 def cmd_skin(a):
@@ -686,7 +686,7 @@ def _assignments(items, prefix=""):
     for item in items or []:
         if "=" not in item:
             raise CliError("bad_assignment", f"Expected slider=value, got '{item}'",
-                           hint="e.g. nose.width=0.4 eyes.tilt=-0.3 (see `kankuro face list`)")
+                           hint="e.g. nose.width=0.4 eyes.tilt=-0.3 (see `sasori face list`)")
         k, v = item.split("=", 1)
         k = k.strip()
         if prefix and not k.startswith(prefix):
@@ -706,7 +706,7 @@ def cmd_face(a):
                    if not a.group or k.split(".")[0] == a.group}
         out = {"sliders": sliders, "groups": sorted({k.split(".")[0] for k in appearance.FACE_SLIDERS}),
                "presets": {k: v["desc"] for k, v in appearance.FACE_PRESETS.items()},
-               "usage": "kankuro face set nose.width=0.4 jaw.width=-0.3 | face preset angular | "
+               "usage": "sasori face set nose.width=0.4 jaw.width=-0.3 | face preset angular | "
                         "face randomize --seed 7 --strength 0.6 | face reset"}
         try:
             out["current"] = _face_summary(specmod.load(_project(a)))["shape"]
@@ -758,7 +758,7 @@ def cmd_face(a):
     out = _face_summary(s)
     if a.action == "randomize":
         out["seed"] = face["seed"]
-    out["tip"] = "Check it with `kankuro render --focus head --views front,three_quarter,side`"
+    out["tip"] = "Check it with `sasori render --focus head --views front,three_quarter,side`"
     return out
 
 
@@ -827,7 +827,7 @@ def cmd_animations(a):
         util.reset_scene()
         clips = anim.list_clips()
     return {"library": "Mesh2Motion human-base (CC0)", "count": len(clips), "clips": clips,
-            "usage": "kankuro build --animations Idle_A,Jog   (or --animations all)"}
+            "usage": "sasori build --animations Idle_A,Jog   (or --animations all)"}
 
 
 def cmd_reference_body(a):
@@ -846,8 +846,8 @@ def cmd_reference_body(a):
             bo.parent = None
         bpy.ops.export_scene.gltf(filepath=p, export_format="GLB", use_selection=True, export_skins=a.with_rig)
     return {"glb": p, "note": "Neutral T-pose body (feet at z=0, facing -Y in Blender / +Z in glTF). Model custom "
-                             "garments or hair on top of it, export as GLB/OBJ, then `kankuro garment import` / "
-                             "`kankuro hair import`; they are conformed and skinned to any body shape."}
+                             "garments or hair on top of it, export as GLB/OBJ, then `sasori garment import` / "
+                             "`sasori hair import`; they are conformed and skinned to any body shape."}
 
 
 def cmd_autorig(a):
@@ -906,7 +906,7 @@ def cmd_validate(a):
 
 
 GUIDES = {
-    "agents": ("agents.md", "driving kankuro from an AI agent: JSON contract, working loop, system prompt"),
+    "agents": ("agents.md", "driving sasori from an AI agent: JSON contract, working loop, system prompt"),
     "start": ("getting-started.md", "ten-minute walk-through: body, face, hair, clothes, textures, GLB"),
     "cli": ("cli-reference.md", "every command, option, output and error code"),
     "spec": ("character-spec.md", "the character.json format"),
@@ -922,12 +922,12 @@ def _guide_text(topic):
     with open(path, encoding="utf-8") as f:
         text = f.read()
     others = ", ".join(t for t in GUIDES if t != topic)
-    return text.rstrip() + f"\n\n---\nMore: `kankuro guide <topic>` ({others}), `kankuro <command> --help`.\n"
+    return text.rstrip() + f"\n\n---\nMore: `sasori guide <topic>` ({others}), `sasori <command> --help`.\n"
 
 
 def cmd_guide(a):
     if a.list:
-        return {"topics": {k: v[1] for k, v in GUIDES.items()}, "usage": "kankuro guide <topic>"}
+        return {"topics": {k: v[1] for k, v in GUIDES.items()}, "usage": "sasori guide <topic>"}
     return {"topic": a.topic, "text": _guide_text(a.topic)}
 
 
@@ -940,7 +940,7 @@ def cmd_schema(a):
                 "skeleton": "Mesh2Motion human: 65 bones, Unreal-style names (pelvis, spine_01..03, clavicle_l, ...)",
                 "output": "one JSON object per command on stdout",
             },
-            "learn_more": "kankuro guide (agent guide, plain text), kankuro guide --list, kankuro <command> --help"}
+            "learn_more": "sasori guide (agent guide, plain text), sasori guide --list, sasori <command> --help"}
 
 
 SCHEMA = {
@@ -986,9 +986,9 @@ SCHEMA = {
 def parser():
     from . import helptext
     names = helptext.names()
-    ap = argparse.ArgumentParser(prog="kankuro", description=helptext.TOP_DESCRIPTION,
+    ap = argparse.ArgumentParser(prog="sasori", description=helptext.TOP_DESCRIPTION,
                                  epilog=helptext.TOP_EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("-p", "--project", help="project directory (default: $KANKURO_PROJECT or cwd)")
+    ap.add_argument("-p", "--project", help="project directory (default: $SASORI_PROJECT or cwd)")
     ap.add_argument("--version", action="version", version=VERSION)
     sp = ap.add_subparsers(dest="cmd", required=True, metavar="<command>")
 
@@ -1066,7 +1066,7 @@ def parser():
     x.add_argument("--keep-slot", action="store_true")
 
     def _place(x):
-        x.add_argument("--file", help="mesh (.glb/.gltf/.obj/.fbx) modelled on `kankuro reference-body`")
+        x.add_argument("--file", help="mesh (.glb/.gltf/.obj/.fbx) modelled on `sasori reference-body`")
         x.add_argument("--builtin")
         x.add_argument("--offset", metavar="X,Y,Z")
         x.add_argument("--rotate", metavar="X,Y,Z")
@@ -1194,7 +1194,7 @@ def main(argv=None):
         if e.code == 0:
             return 0
         return emit({"ok": False, "error": {"code": "bad_arguments", "message": "Invalid command line",
-                                            "hint": "Run `kankuro --help`, `kankuro <command> --help` or `kankuro guide`"}}, 2)
+                                            "hint": "Run `sasori --help`, `sasori <command> --help` or `sasori guide`"}}, 2)
     try:
         if a.cmd == "hair" and a.action == "set" and not a.style and not a.color:
             raise CliError("missing_arg", "hair set needs a style", hint=f"Valid: {', '.join(catalog.HAIR_STYLES)}")

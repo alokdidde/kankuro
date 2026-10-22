@@ -3,8 +3,8 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "kankuro"
-version = "0.3.2"
+name = "sasori"
+version = "0.4.0"
 description = "Agent-friendly character creator CLI: MakeHuman body + Mesh2Motion skeleton, built with Blender (bpy)"
 readme = "README.md"
 license = "MIT"
@@ -23,15 +23,15 @@ requires-python = ">=3.13,<3.14"
 dependencies = ["bpy==5.2.*", "numpy", "pillow"]
 
 [project.urls]
-Homepage = "https://github.com/alokdidde/kankuro"
-Documentation = "https://github.com/alokdidde/kankuro/tree/main/docs"
-Issues = "https://github.com/alokdidde/kankuro/issues"
+Homepage = "https://github.com/alokdidde/sasori"
+Documentation = "https://github.com/alokdidde/sasori/tree/main/docs"
+Issues = "https://github.com/alokdidde/sasori/issues"
 
 [project.scripts]
-kankuro = "kankuro.cli:main"
+sasori = "sasori.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["kankuro*"]
+include = ["sasori*"]
 
 [tool.setuptools.package-data]
-kankuro = ["data/*", "data/*/*", "guides/*.md"]
+sasori = ["data/*", "data/*/*", "guides/*.md"]

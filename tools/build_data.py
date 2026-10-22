@@ -1,4 +1,4 @@
-"""Compile third-party CC0 source assets into the compact files under kankuro/data.
+"""Compile third-party CC0 source assets into the compact files under sasori/data.
 
 Sources (both CC0):
   * MakeHuman  https://github.com/makehumancommunity/makehuman  (base mesh, morph targets, weights, eyes,
@@ -20,7 +20,7 @@ import sys
 import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-DATA = os.path.join(HERE, "..", "kankuro", "data")
+DATA = os.path.join(HERE, "..", "sasori", "data")
 
 
 def mh_to_bl(a):

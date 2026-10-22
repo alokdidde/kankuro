@@ -1,7 +1,7 @@
-"""Smoke-test an installed kankuro: build a dressed character, check the GLB, and autorig the reference body.
+"""Smoke-test an installed sasori: build a dressed character, check the GLB, and autorig the reference body.
 
-    python tools/smoke_test.py ./kankuro-0.1.0-linux-x64/kankuro        (a release bundle launcher)
-    python tools/smoke_test.py kankuro                                  (a pip install on PATH)
+    python tools/smoke_test.py ./sasori-0.1.0-linux-x64/sasori        (a release bundle launcher)
+    python tools/smoke_test.py sasori                                  (a pip install on PATH)
 """
 import json
 import os
@@ -26,9 +26,9 @@ def run(cli, *args):
 def main():
     cli = sys.argv[1]
     if os.path.exists(cli):
-        # cmd.exe misreads a relative "dir/kankuro.cmd" as the command "dir" with a switch.
+        # cmd.exe misreads a relative "dir/sasori.cmd" as the command "dir" with a switch.
         cli = os.path.abspath(cli)
-    tmp = tempfile.mkdtemp(prefix="kankuro-smoke-")
+    tmp = tempfile.mkdtemp(prefix="sasori-smoke-")
     proj = os.path.join(tmp, "hero")
     run(cli, "schema")
     run(cli, "init", proj, "--preset", "athletic_male")

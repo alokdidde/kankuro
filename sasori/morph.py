@@ -138,7 +138,7 @@ def target_weights(macros=None, modifiers=None):
     for name, val in (modifiers or {}).items():
         if name not in cat:
             raise CliError("unknown_modifier", f"Unknown morph modifier '{name}'",
-                           hint="Run `kankuro morphs list` to see valid modifier names")
+                           hint="Run `sasori morphs list` to see valid modifier names")
         c = cat[name]
         lo, hi = c["range"]
         val = float(min(max(val, lo), hi))

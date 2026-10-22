@@ -10,7 +10,7 @@ from test_cli import cc
 
 class FaceDeltas(unittest.TestCase):
     def test_all_52_move_the_face(self):
-        from kankuro import face, morph
+        from sasori import face, morph
         co = morph.morphed_coords()
         self.assertEqual(len(face.ARKIT_NAMES), 52)
         d = face.deltas(co, face.ARKIT_NAMES)
@@ -21,7 +21,7 @@ class FaceDeltas(unittest.TestCase):
         self.assertGreater(np.abs(d["eyeBlinkLeft"][co[:, 0] > 0]).max(), 0.005)
 
     def test_parse_expression(self):
-        from kankuro import face
+        from sasori import face
         w, bad = face.parse_expression("smile,jawOpen=0.3")
         self.assertIsNone(bad)
         self.assertEqual(w["jawOpen"], 0.3)
@@ -54,7 +54,7 @@ class SkinDetail(unittest.TestCase):
 
     def test_detail_varies_the_face_tone(self):
         from PIL import Image
-        from kankuro import textures
+        from sasori import textures
         d = tempfile.mkdtemp()
         flat = textures.skin_texture("#7f4f32", os.path.join(d, "flat.png"), size=512, detail=False)
         rich = textures.skin_texture("#7f4f32", os.path.join(d, "rich.png"), size=512, detail=True)
@@ -69,7 +69,7 @@ class SkinDetail(unittest.TestCase):
 
     def test_roughness_map_has_a_shinier_tzone(self):
         from PIL import Image
-        from kankuro import textures
+        from sasori import textures
         out = textures.skin_roughness(0.6, os.path.join(tempfile.mkdtemp(), "r.png"), size=256)
         g = np.asarray(Image.open(out))[..., 1] / 255
         self.assertLess(g.min(), 0.5)
@@ -77,7 +77,7 @@ class SkinDetail(unittest.TestCase):
 
     def test_shading_depends_on_tone(self):
         import bpy  # noqa: F401
-        from kankuro.blender import materials
+        from sasori.blender import materials
         fair, dark = materials.skin_shading("#f1c7a8", 0.6), materials.skin_shading("#7f4f32", 0.6)
         self.assertLess(dark["subsurface"], fair["subsurface"])
         self.assertGreater(dark["specular"], fair["specular"])
@@ -85,7 +85,7 @@ class SkinDetail(unittest.TestCase):
     def test_sclera_is_bright(self):
         import bpy  # noqa: F401
         from PIL import Image
-        from kankuro.blender import materials, rig
+        from sasori.blender import materials, rig
         src = os.path.join(rig.DATA, "eyes", "brown_eye.png")
         out = materials.eye_texture(src, os.path.join(tempfile.mkdtemp(), "e.png"), "#3b2416")
         a = np.asarray(Image.open(src).convert("RGB")).astype(float)

@@ -1,12 +1,12 @@
-"""Build a self-contained kankuro bundle: a relocatable Python 3.13 with bpy + kankuro installed.
+"""Build a self-contained sasori bundle: a relocatable Python 3.13 with bpy + sasori installed.
 
-    python tools/make_bundle.py --wheel dist/kankuro-0.1.0-py3-none-any.whl --name kankuro-0.1.0-linux-x64
+    python tools/make_bundle.py --wheel dist/sasori-0.1.0-py3-none-any.whl --name sasori-0.1.0-linux-x64
 
 Writes dist/<name>.tar.gz (or .zip on Windows). Unpacked, it runs anywhere on that OS with no
 Python or Blender installed:
 
-    <name>/kankuro schema              (Linux / macOS)
-    <name>\\kankuro.cmd schema          (Windows)
+    <name>/sasori schema              (Linux / macOS)
+    <name>\\sasori.cmd schema          (Windows)
 
 Needs `uv` on PATH (it downloads the python-build-standalone interpreter).
 """
@@ -23,28 +23,28 @@ WIN = sys.platform == "win32"
 PY_VERSION = "3.13"
 
 SH_LAUNCHER = """#!/bin/sh
-# kankuro launcher: runs the bundled Python with the kankuro CLI.
+# sasori launcher: runs the bundled Python with the sasori CLI.
 here="$(cd "$(dirname "$0")" && pwd)"
-exec "$here/python/bin/python3" -I -m kankuro "$@"
+exec "$here/python/bin/python3" -I -m sasori "$@"
 """
 
 CMD_LAUNCHER = """@echo off
-rem kankuro launcher: runs the bundled Python with the kankuro CLI.
-"%~dp0python\\python.exe" -I -m kankuro %*
+rem sasori launcher: runs the bundled Python with the sasori CLI.
+"%~dp0python\\python.exe" -I -m sasori %*
 """
 
-README = """kankuro {version} ({name})
+README = """sasori {version} ({name})
 =========================
 
-A self-contained build of the kankuro character creator CLI. It bundles Python {py} and
+A self-contained build of the sasori character creator CLI. It bundles Python {py} and
 Blender's bpy module, so nothing else needs to be installed.
 
 Run it from this folder (or add this folder to your PATH):
 
-  Linux / macOS:   ./kankuro schema
-  Windows:         kankuro.cmd schema
+  Linux / macOS:   ./sasori schema
+  Windows:         sasori.cmd schema
 
-Docs: https://github.com/alokdidde/kankuro/tree/main/docs
+Docs: https://github.com/alokdidde/sasori/tree/main/docs
 """
 
 
@@ -63,8 +63,8 @@ def find_python(install_dir):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--wheel", required=True, help="the kankuro wheel to install")
-    ap.add_argument("--name", required=True, help="bundle folder/archive name, e.g. kankuro-0.1.0-linux-x64")
+    ap.add_argument("--wheel", required=True, help="the sasori wheel to install")
+    ap.add_argument("--name", required=True, help="bundle folder/archive name, e.g. sasori-0.1.0-linux-x64")
     ap.add_argument("--out", default="dist", help="output directory (default: dist)")
     ap.add_argument("--version", default="", help="version shown in the bundle README")
     a = ap.parse_args()
@@ -72,7 +72,7 @@ def main():
     wheel = os.path.abspath(a.wheel)
     out = os.path.abspath(a.out)
     os.makedirs(out, exist_ok=True)
-    tmp = tempfile.mkdtemp(prefix="kankuro-bundle-")
+    tmp = tempfile.mkdtemp(prefix="sasori-bundle-")
     root = os.path.join(tmp, a.name)
     os.makedirs(root)
 
@@ -89,13 +89,13 @@ def main():
             os.remove(p)
     python = os.path.join(pydir, "python.exe") if WIN else os.path.join(pydir, "bin", "python3")
 
-    # 2. kankuro + its dependencies (bpy, numpy, pillow) into that interpreter.
+    # 2. sasori + its dependencies (bpy, numpy, pillow) into that interpreter.
     run([python, "-I", "-m", "pip", "install", "--no-cache-dir", "--disable-pip-version-check", wheel])
     run([python, "-I", "-m", "pip", "check"])
-    run([python, "-I", "-m", "kankuro", "--version"])
+    run([python, "-I", "-m", "sasori", "--version"])
 
     # 3. Launchers and a README.
-    for name in ("kankuro",):
+    for name in ("sasori",):
         if WIN:
             with open(os.path.join(root, name + ".cmd"), "w", newline="\r\n") as f:
                 f.write(CMD_LAUNCHER)

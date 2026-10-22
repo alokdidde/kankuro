@@ -1,4 +1,4 @@
-"""Copy the docs that `kankuro guide` prints into the package (kankuro/guides/).
+"""Copy the docs that `sasori guide` prints into the package (sasori/guides/).
 
     python tools/sync_guides.py
 
@@ -10,9 +10,9 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
-from kankuro.cli import GUIDES  # noqa: E402
+from sasori.cli import GUIDES  # noqa: E402
 
-dst = os.path.join(ROOT, "kankuro", "guides")
+dst = os.path.join(ROOT, "sasori", "guides")
 os.makedirs(dst, exist_ok=True)
 for fn, _ in GUIDES.values():
     shutil.copyfile(os.path.join(ROOT, "docs", fn), os.path.join(dst, fn))

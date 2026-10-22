@@ -78,7 +78,7 @@ ARKIT = {
 ARKIT_NAMES = list(ARKIT)
 SETS = {"arkit52": ARKIT_NAMES, "none": []}
 
-# Named expressions for previews (`kankuro render --expression smile`), as ARKit weights.
+# Named expressions for previews (`sasori render --expression smile`), as ARKit weights.
 PRESETS = {
     "smile": {"mouthSmileLeft": 1.0, "mouthSmileRight": 1.0, "cheekSquintLeft": 0.5, "cheekSquintRight": 0.5,
               "eyeSquintLeft": 0.3, "eyeSquintRight": 0.3},

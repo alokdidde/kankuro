@@ -1,6 +1,6 @@
 # How it works
 
-The details behind each feature: what kankuro does under the hood, and the options that tune it.
+The details behind each feature: what sasori does under the hood, and the options that tune it.
 For every command and flag, see [cli-reference.md](cli-reference.md).
 
 ## Body and skeleton
@@ -11,7 +11,7 @@ exact **Mesh2Motion human rig**: 65 bones plus `root`, Unreal-style names, T-pos
 bone orientations, so every Mesh2Motion animation plays unchanged. Bone positions are fitted to each
 body from MakeHuman's joint helpers, the mesh is posed into the Mesh2Motion T-pose, and skin weights
 (at most 4 influences, normalised) come from MakeHuman's CC0 weights mapped onto the Mesh2Motion bones.
-`kankuro validate` checks names, hierarchy, rest orientations and weights.
+`sasori validate` checks names, hierarchy, rest orientations and weights.
 
 ## Hair
 
@@ -24,12 +24,12 @@ body from MakeHuman's joint helpers, the mesh is posed into the Mesh2Motion T-po
 ## Clothes and textures
 
 ```bash
-kankuro template tshirt          # templates/tshirt_template.png + tshirt_mask.png (2048 px)
+sasori template tshirt          # templates/tshirt_template.png + tshirt_mask.png (2048 px)
 #   -> give the template to the image model: "paint a denim shirt design on this flat sketch,
 #      left = front, right = back seen from behind, keep inside the grey shape"
-kankuro garment set tshirt --texture ./denim_shirt.png
-kankuro garment set tshirt --height ./denim_shirt_height.png   # optional: greyscale relief, white = raised
-kankuro render --views front,back
+sasori garment set tshirt --texture ./denim_shirt.png
+sasori garment set tshirt --height ./denim_shirt_height.png   # optional: greyscale relief, white = raised
+sasori render --views front,back
 ```
 
 The **saree** has its own layout: the pleated skirt's front and back flat sketches at the bottom and
@@ -63,14 +63,14 @@ studio environment (bright ceiling, darker floor, two softbox strips) that only 
 backdrop stays plain grey. [Materials](cli-reference.md#materials) has an image of every preset.
 
 The UV layout comes from a fixed reference body, so **one texture fits that garment on every body
-shape**. `kankuro template body` gives the skin layout (MakeHuman UVs) for `kankuro skin --texture`.
+shape**. `sasori template body` gives the skin layout (MakeHuman UVs) for `sasori skin --texture`.
 
 ### Custom garments and hair
 
 ```bash
-kankuro reference-body --out ref.glb          # neutral T-pose body to model on
-kankuro garment import --file hat.glb --id hat --color "#6b4f2a"
-kankuro hair import --file braids.glb --color "#2a1a10"
+sasori reference-body --out ref.glb          # neutral T-pose body to model on
+sasori garment import --file hat.glb --id hat --color "#6b4f2a"
+sasori hair import --file braids.glb --color "#2a1a10"
 ```
 
 Imported meshes are moved onto the current body shape (a smooth displacement field from reference
@@ -79,9 +79,9 @@ body to current body), skinned from nearby body weights, and pushed out of the s
 ## Accessories, props and extra bones
 
 ```bash
-kankuro accessory add circlet                  # rigid gold band on the head
-kankuro prop add staff                         # a staff in the right hand
-kankuro bones add tail --parent pelvis --count 8 --length 0.9 --radius 0.035
+sasori accessory add circlet                  # rigid gold band on the head
+sasori prop add staff                         # a staff in the right hand
+sasori bones add tail --parent pelvis --count 8 --length 0.9 --radius 0.035
 ```
 
 - **Accessories** are rigid and skinned to one bone. Their placement on the reference body is
@@ -100,7 +100,7 @@ kankuro bones add tail --parent pelvis --count 8 --length 0.9 --radius 0.035
 ## Auto-rigging other meshes
 
 ```bash
-kankuro autorig model.glb --out model_rigged.glb --animations Idle_A --render ./check
+sasori autorig model.glb --out model_rigged.glb --animations Idle_A --render ./check
 ```
 
 Any upright humanoid works: GLB/glTF/OBJ/FBX, T-pose or A-pose (arms down to ~70 degrees), with
@@ -140,13 +140,13 @@ targets, **10 archetype presets** and **seeded randomisation**. Values are store
 `character.json` and merged into the body morphs at build time.
 
 ```bash
-kankuro face list [--group nose]                  # sliders with ranges and descriptions, presets, current values
-kankuro face set nose.width=0.4 jaw.width=-0.3 chin.projection=0.5   # 0 removes a slider
-kankuro face preset angular                       # angular soft round long heart square delicate rugged aquiline broad
-kankuro face preset heart --amount 0.6 --add      # blend a preset on top of the current sliders
-kankuro face randomize --seed 42 --strength 0.5   # a new, plausible face; same seed = same face
-kankuro face randomize --groups nose,mouth --seed 3   # re-roll only some features
-kankuro face reset [--groups eyes]
+sasori face list [--group nose]                  # sliders with ranges and descriptions, presets, current values
+sasori face set nose.width=0.4 jaw.width=-0.3 chin.projection=0.5   # 0 removes a slider
+sasori face preset angular                       # angular soft round long heart square delicate rugged aquiline broad
+sasori face preset heart --amount 0.6 --add      # blend a preset on top of the current sliders
+sasori face randomize --seed 42 --strength 0.5   # a new, plausible face; same seed = same face
+sasori face randomize --groups nose,mouth --seed 3   # re-roll only some features
+sasori face reset [--groups eyes]
 ```
 
 Slider groups: `head` (width, length, depth, fat, age, and 0..1 blends towards oval, round, square,
@@ -154,22 +154,22 @@ rectangular, triangular, heart, diamond), `forehead`, `brows` (brow ridge: heigh
 `nose`, `mouth`, `jaw`, `chin`, `cheeks`, `ears`, `neck`. Bipolar sliders run -1..1 with 0 = unchanged;
 about ±0.3 is a subtle change, ±0.6 clear, ±1 extreme. `--strength` for `randomize`: 0.3 subtle, 0.5
 natural (the default), 1 caricature. The seed is saved in `face.seed`.
-The raw MakeHuman modifiers (`kankuro morphs`) still work and add to the sliders.
+The raw MakeHuman modifiers (`sasori morphs`) still work and add to the sliders.
 
-**Colours.** Every colour option takes `#RRGGBB` or a name from its palette (`kankuro catalog colors`):
+**Colours.** Every colour option takes `#RRGGBB` or a name from its palette (`sasori catalog colors`):
 
 ```bash
-kankuro skin --color tan              # whole body. porcelain fair light light_olive medium olive tan golden_brown
+sasori skin --color tan              # whole body. porcelain fair light light_olive medium olive tan golden_brown
                                        #   brown dark_brown deep ebony (+ pale_grey orc_green blue)
-kankuro hair set long --color auburn  # black soft_black dark_brown brown chestnut auburn copper ginger light_brown
+sasori hair set long --color auburn  # black soft_black dark_brown brown chestnut auburn copper ginger light_brown
                                        #   dark_blonde blonde platinum ash_blonde grey salt_pepper white + dyed colours
-kankuro hair set --color platinum     # recolour the current hair, keep the style
+sasori hair set --color platinum     # recolour the current hair, keep the style
 ```
 
 **Eyes.** Iris colour plus the `eyes.*` sliders, without the prefix:
 
 ```bash
-kankuro eyes --color hazel size=0.3 tilt=0.4 monolid=0.5
+sasori eyes --color hazel size=0.3 tilt=0.4 monolid=0.5
 #   colours: dark_brown brown light_brown amber hazel green grey_green grey blue light_blue steel_blue violet red gold
 #   shape:   size spacing height tilt (up = cat-eye) openness width lid_crease lid_fold monolid bags
 ```
@@ -177,10 +177,10 @@ kankuro eyes --color hazel size=0.3 tilt=0.4 monolid=0.5
 **Eyebrows.** Hair shape and colour, plus the brow-ridge sliders (`brows.*`):
 
 ```bash
-kankuro brows --preset arched --color dark_brown   # natural thin thick bushy straight arched sparse short
-kankuro brows --thickness 1.3 --arch -0.5 --density 1.2 --length 0.9 height=0.2 ridge=0.3
-kankuro brows --color hair                         # follow the hair colour (the default)
-kankuro brows --off                                # no eyebrows
+sasori brows --preset arched --color dark_brown   # natural thin thick bushy straight arched sparse short
+sasori brows --thickness 1.3 --arch -0.5 --density 1.2 --length 0.9 height=0.2 ridge=0.3
+sasori brows --color hair                         # follow the hair colour (the default)
+sasori brows --off                                # no eyebrows
 ```
 
 `--thickness` 0.3..2 (1 natural), `--arch` -1 flat .. 1 high, `--density` 0.2..2, `--length` 0.5..1.4. They
@@ -196,10 +196,10 @@ are stored as `skin.brow_thickness`, `brow_arch`, `brow_density`, `brow_length` 
 directly. They don't touch the skeleton, so the Mesh2Motion rig and its clips are unchanged.
 
 ```bash
-kankuro render --focus head --expression smile                  # presets: smile laugh surprise angry sad blink kiss
-kankuro render --focus head --expression jawOpen=0.6,eyeBlinkLeft=1,smile
-kankuro catalog expressions                                     # the 52 names and the presets
-kankuro set face.blendshapes=none                               # leave them out (smaller GLB)
+sasori render --focus head --expression smile                  # presets: smile laugh surprise angry sad blink kiss
+sasori render --focus head --expression jawOpen=0.6,eyeBlinkLeft=1,smile
+sasori catalog expressions                                     # the 52 names and the presets
+sasori set face.blendshapes=none                               # leave them out (smaller GLB)
 ```
 
 The shapes are generated for each character from MakeHuman's CC0 face data, so they fit any body and face

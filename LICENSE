@@ -1,6 +1,6 @@
 MIT License
 
-Copyright (c) 2026 alokdidde and the kankuro contributors
+Copyright (c) 2026 alokdidde and the sasori contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -22,7 +22,7 @@ SOFTWARE.
 
 ---
 
-Third-party data bundled in kankuro/data/ is CC0 (public domain):
+Third-party data bundled in sasori/data/ is CC0 (public domain):
 MakeHuman base mesh, targets, weights and eyes (makehumancommunity/makehuman) and
 the Mesh2Motion human rig and animations (scottpetrovic/mesh2motion-app).
 The release bundles also contain Python (PSF License) and Blender's bpy module

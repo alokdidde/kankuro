@@ -1,12 +1,12 @@
 name: Release
 
 # Releases are automatic: every push to main (a merged pull request) whose pyproject version has no
-# GitHub release yet publishes v<version>. So bump the version in pyproject.toml and kankuro/cli.py
+# GitHub release yet publishes v<version>. So bump the version in pyproject.toml and sasori/cli.py
 # to release; merges that keep the version only run the version check. Pushing a tag like v0.4.0, or
 # pushing the commit to the `release` branch (git push origin main:release), also publishes. The
 # release has:
-#   - kankuro-<v>-py3-none-any.whl + sdist  (pip/uv install; pulls the right bpy wheel per platform)
-#   - self-contained bundles (Python 3.13 + bpy + kankuro) for Linux x64, macOS arm64,
+#   - sasori-<v>-py3-none-any.whl + sdist  (pip/uv install; pulls the right bpy wheel per platform)
+#   - self-contained bundles (Python 3.13 + bpy + sasori) for Linux x64, macOS arm64,
 #     Windows x64 and Windows arm64, each smoke-tested on its own runner
 #   - SHA256SUMS.txt
 # Pull requests that touch packaging run it as a dry run (build and smoke-test every bundle, no
@@ -56,8 +56,8 @@ jobs:
         run: |
           import os, re, tomllib
           v = tomllib.load(open("pyproject.toml", "rb"))["project"]["version"]
-          cli = re.search(r'^VERSION = "(.+)"', open("kankuro/cli.py").read(), re.M).group(1)
-          assert cli == v, f"kankuro/cli.py VERSION {cli} != pyproject.toml version {v}"
+          cli = re.search(r'^VERSION = "(.+)"', open("sasori/cli.py").read(), re.M).group(1)
+          assert cli == v, f"sasori/cli.py VERSION {cli} != pyproject.toml version {v}"
           ref = os.environ["GITHUB_REF"]
           if ref.startswith("refs/tags/"):
               tag = ref.removeprefix("refs/tags/")
@@ -104,13 +104,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: ubuntu-latest, target: linux-x64, ext: tar.gz, launcher: kankuro }
-          - { os: macos-latest, target: macos-arm64, ext: tar.gz, launcher: kankuro }
-          - { os: windows-latest, target: windows-x64, ext: zip, launcher: kankuro.cmd }
-          - { os: windows-11-arm, target: windows-arm64, ext: zip, launcher: kankuro.cmd }
+          - { os: ubuntu-latest, target: linux-x64, ext: tar.gz, launcher: sasori }
+          - { os: macos-latest, target: macos-arm64, ext: tar.gz, launcher: sasori }
+          - { os: windows-latest, target: windows-x64, ext: zip, launcher: sasori.cmd }
+          - { os: windows-11-arm, target: windows-arm64, ext: zip, launcher: sasori.cmd }
     timeout-minutes: 45
     env:
-      NAME: kankuro-${{ needs.dist.outputs.version }}-${{ matrix.target }}
+      NAME: sasori-${{ needs.dist.outputs.version }}-${{ matrix.target }}
     steps:
       - uses: actions/checkout@v5
       - uses: astral-sh/setup-uv@v6
@@ -122,7 +122,7 @@ jobs:
         shell: bash
         run: |
           uv run --no-project --python 3.13 tools/make_bundle.py \
-            --wheel dist/kankuro-${{ needs.dist.outputs.version }}-py3-none-any.whl \
+            --wheel dist/sasori-${{ needs.dist.outputs.version }}-py3-none-any.whl \
             --name "$NAME" --version ${{ needs.dist.outputs.version }} --out bundles
       - name: Unpack and smoke-test
         shell: bash
@@ -166,20 +166,20 @@ jobs:
 
           | platform | file |
           |---|---|
-          | Linux x64 | \`kankuro-${{ needs.dist.outputs.version }}-linux-x64.tar.gz\` |
-          | macOS Apple Silicon | \`kankuro-${{ needs.dist.outputs.version }}-macos-arm64.tar.gz\` |
-          | Windows x64 | \`kankuro-${{ needs.dist.outputs.version }}-windows-x64.zip\` |
-          | Windows ARM64 | \`kankuro-${{ needs.dist.outputs.version }}-windows-arm64.zip\` |
-          | any (pip / uv, Python 3.13) | \`kankuro-${{ needs.dist.outputs.version }}-py3-none-any.whl\` |
+          | Linux x64 | \`sasori-${{ needs.dist.outputs.version }}-linux-x64.tar.gz\` |
+          | macOS Apple Silicon | \`sasori-${{ needs.dist.outputs.version }}-macos-arm64.tar.gz\` |
+          | Windows x64 | \`sasori-${{ needs.dist.outputs.version }}-windows-x64.zip\` |
+          | Windows ARM64 | \`sasori-${{ needs.dist.outputs.version }}-windows-arm64.zip\` |
+          | any (pip / uv, Python 3.13) | \`sasori-${{ needs.dist.outputs.version }}-py3-none-any.whl\` |
 
-          The bundles include Python 3.13 and Blender's bpy, so nothing else is needed. Unpack and run \`./kankuro schema\` (\`kankuro.cmd schema\` on Windows).
+          The bundles include Python 3.13 and Blender's bpy, so nothing else is needed. Unpack and run \`./sasori schema\` (\`sasori.cmd schema\` on Windows).
           Full instructions: https://github.com/${{ github.repository }}/blob/main/docs/installation.md
 
           NOTES
           # Creates the tag at this commit when it came from main or the release branch; fails if the
           # release exists.
           gh release create "$TAG" assets/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-            --title "kankuro $TAG" --notes-file notes.md --generate-notes
+            --title "sasori $TAG" --notes-file notes.md --generate-notes
 
   pypi:
     name: Publish to PyPI

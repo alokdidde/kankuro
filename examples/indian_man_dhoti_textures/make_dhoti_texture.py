@@ -1,4 +1,4 @@
-"""Dhoti albedo + height from the kankuro mask: cream cloth, maroon/gold border at the leg hems and
+"""Dhoti albedo + height from the sasori mask: cream cloth, maroon/gold border at the leg hems and
 waist, soft vertical pleats down the front."""
 import sys
 import numpy as np

@@ -3,7 +3,7 @@
 ## Set up
 
 ```bash
-git clone https://github.com/alokdidde/kankuro && cd kankuro
+git clone https://github.com/alokdidde/sasori && cd sasori
 python3.13 -m venv .venv && source .venv/bin/activate     # bpy 5.2 needs Python 3.13
 pip install -e .
 python -m unittest discover tests -v                       # ~1-2 minutes, end to end
@@ -14,37 +14,37 @@ If an editable install isn't possible (some network filesystems), install the de
 
 ```bash
 pip install "bpy==5.2.*" numpy pillow
-PYTHONPATH=. python -m kankuro schema
+PYTHONPATH=. python -m sasori schema
 ```
 
 ## Code layout
 
 ```
-kankuro/cli.py            commands, argument parsing, JSON output
-kankuro/spec.py           character.json schema, presets, validation
-kankuro/morph.py          MakeHuman macro and detail morphs (numpy, no Blender)
-kankuro/catalog.py        hair styles and garment definitions
-kankuro/textures.py       skin map, UV templates
-kankuro/fabric.py         fabric relief: weave/stitch/fold height -> normal map, albedo bake
-kankuro/blender/*.py      body and skeleton fit, garments, hair, materials, render, anim, autorig, validate
-kankuro/data/             compiled CC0 assets (tools/build_data.py regenerates them)
+sasori/cli.py            commands, argument parsing, JSON output
+sasori/spec.py           character.json schema, presets, validation
+sasori/morph.py          MakeHuman macro and detail morphs (numpy, no Blender)
+sasori/catalog.py        hair styles and garment definitions
+sasori/textures.py       skin map, UV templates
+sasori/fabric.py         fabric relief: weave/stitch/fold height -> normal map, albedo bake
+sasori/blender/*.py      body and skeleton fit, garments, hair, materials, render, anim, autorig, validate
+sasori/data/             compiled CC0 assets (tools/build_data.py regenerates them)
 tests/test_cli.py          end-to-end tests through the CLI
-tools/build_data.py        rebuild kankuro/data from MakeHuman and Mesh2Motion sources
+tools/build_data.py        rebuild sasori/data from MakeHuman and Mesh2Motion sources
 tools/make_bundle.py       build a self-contained release bundle
-tools/smoke_test.py        smoke-test an installed kankuro or a bundle
+tools/smoke_test.py        smoke-test an installed sasori or a bundle
 ```
 
 House rules:
 
 * Every command prints exactly one JSON object. Errors are `CliError(code, message, hint=...)`.
-* Modules under `kankuro/blender/` may import `bpy`; everything else must not, so spec commands
+* Modules under `sasori/blender/` may import `bpy`; everything else must not, so spec commands
   stay instant.
 * New garments and hair styles go in `catalog.py`.
-* A new command or option needs its help in `kankuro/helptext.py` (summary, description, examples,
+* A new command or option needs its help in `sasori/helptext.py` (summary, description, examples,
   per-option help); `tests/test_guides.py` checks every command has examples.
-* After editing a doc that `kankuro guide` prints (agents, getting-started, cli-reference,
+* After editing a doc that `sasori guide` prints (agents, getting-started, cli-reference,
   character-spec, codex-textures, installation), run `python tools/sync_guides.py` to copy it into
-  `kankuro/guides/`; the tests fail if the copies drift.
+  `sasori/guides/`; the tests fail if the copies drift.
 
 ## CI
 
@@ -55,11 +55,11 @@ pull request:
   with `bpy==5.2.*`. pip's cache is keyed on `pyproject.toml`, so the ~300 MB bpy download is
   usually cached.
 * **Wheel installs and runs**: builds the wheel, installs it in a clean venv and runs
-  `tools/smoke_test.py` against the installed `kankuro` command (catches missing package data).
+  `tools/smoke_test.py` against the installed `sasori` command (catches missing package data).
 
 ## How multi-platform support works
 
-kankuro is pure Python, so it ships as **one wheel** (`py3-none-any`) that depends on `bpy`. The
+sasori is pure Python, so it ships as **one wheel** (`py3-none-any`) that depends on `bpy`. The
 platform-specific part is `bpy`, which Blender publishes on PyPI as per-platform wheels for Python
 3.13 only: Linux x86-64, macOS arm64, Windows x86-64 and Windows arm64. So:
 
@@ -67,7 +67,7 @@ platform-specific part is `bpy`, which Blender publishes on PyPI as per-platform
 2. **Bundles** are for people without Python 3.13. The release workflow builds one per platform
    on that platform's own GitHub runner: it takes a relocatable CPython 3.13 from
    [python-build-standalone](https://github.com/astral-sh/python-build-standalone) (via `uv`),
-   pip-installs the kankuro wheel into it, adds `kankuro` / `kankuro.cmd` launchers, and archives
+   pip-installs the sasori wheel into it, adds `sasori` / `sasori.cmd` launchers, and archives
    it. Each bundle is then unpacked and smoke-tested on the same runner before it's published.
 
 Platforms bpy doesn't cover (Intel Macs, Linux ARM) can't be supported without building Blender
@@ -79,8 +79,8 @@ You can build a bundle locally for your own platform:
 
 ```bash
 pip install build && python -m build --wheel
-python tools/make_bundle.py --wheel dist/kankuro-0.1.0-py3-none-any.whl --name kankuro-0.1.0-linux-x64
-python tools/smoke_test.py ./unpacked/kankuro-0.1.0-linux-x64/kankuro     # after extracting it
+python tools/make_bundle.py --wheel dist/sasori-0.1.0-py3-none-any.whl --name sasori-0.1.0-linux-x64
+python tools/smoke_test.py ./unpacked/sasori-0.1.0-linux-x64/sasori     # after extracting it
 ```
 
 ## Cutting a release
@@ -90,7 +90,7 @@ Releases are automatic. Every push to `main` (a merged pull request) checks the 
 Merges that keep the version only run that check, so nothing is rebuilt.
 
 1. In the pull request, bump the version in **both** `pyproject.toml` (`version`) and
-   `kankuro/cli.py` (`VERSION`). The workflow refuses to release if they disagree.
+   `sasori/cli.py` (`VERSION`). The workflow refuses to release if they disagree.
 2. Merge it. [`.github/workflows/release.yml`](../.github/workflows/release.yml) then:
    * runs the full test matrix,
    * builds the wheel and sdist,
@@ -118,13 +118,13 @@ The release workflow has a `pypi` job that's off until you turn it on. It uses P
 
 1. Sign in to [pypi.org](https://pypi.org) and open
    [Publishing > Add a new pending publisher](https://pypi.org/manage/account/publishing/).
-2. Fill in: PyPI project name `kankuro`, owner `alokdidde`, repository `kankuro`, workflow name
+2. Fill in: PyPI project name `sasori`, owner `alokdidde`, repository `sasori`, workflow name
    `release.yml`, environment `pypi`.
 3. In the GitHub repo: **Settings > Environments > New environment** named `pypi`.
 4. **Settings > Secrets and variables > Actions > Variables**: add `PUBLISH_PYPI` = `true`.
 
 The next release then also uploads the wheel and sdist to PyPI, and
-`pip install kankuro` / `uv tool install kankuro` work everywhere.
+`pip install sasori` / `uv tool install sasori` work everywhere.
 
 ## Updating Blender
 

@@ -53,7 +53,7 @@ REGIONS = ("border", "hem")
 def check(name, field="material"):
     if name not in MATERIALS:
         raise CliError("unknown_material", f"{field}: unknown material '{name}'",
-                       hint="Valid: " + ", ".join(MATERIALS) + " (see `kankuro catalog materials`)")
+                       hint="Valid: " + ", ".join(MATERIALS) + " (see `sasori catalog materials`)")
     return MATERIALS[name]
 
 

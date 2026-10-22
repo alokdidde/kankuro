@@ -20,8 +20,8 @@ the CLI adds it, and painted shadows would double it.
 ## 1. Get the template
 
 ```bash
-kankuro template tshirt            # -> templates/tshirt_template.png and templates/tshirt_mask.png
-kankuro template all               # every garment type in the catalog
+sasori template tshirt            # -> templates/tshirt_template.png and templates/tshirt_mask.png
+sasori template all               # every garment type in the catalog
 ```
 
 The template is 2048×2048. The **left half is the front** of the garment and the **right half is
@@ -103,11 +103,11 @@ Use these in the `[...]` slot of the albedo prompt:
 ## 4. Bring them into the CLI
 
 ```bash
-kankuro garment set jacket --texture ./jacket_albedo.png --height ./jacket_height.png --fabric canvas
-kankuro garment set jacket --normal ./jacket_normal.png        # optional, blended on top
-kankuro garment set jacket --normal-strength 1.5               # more/less relief (default 1)
-kankuro render --focus upper --views front,three_quarter,back
-kankuro build
+sasori garment set jacket --texture ./jacket_albedo.png --height ./jacket_height.png --fabric canvas
+sasori garment set jacket --normal ./jacket_normal.png        # optional, blended on top
+sasori garment set jacket --normal-strength 1.5               # more/less relief (default 1)
+sasori render --focus upper --views front,three_quarter,back
+sasori build
 ```
 
 `--fabric` chooses the built-in micro-relief that goes under your maps: `cotton` (woven), `jersey`, `denim`, `knit`,

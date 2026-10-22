@@ -193,7 +193,7 @@ def m2m_bones():
 
 
 # Accessories: rigid pieces on one bone (blender/accessories.py). Built-ins are made on the reference body
-# so agents can try the command without a mesh; your own are modelled on `kankuro reference-body`.
+# so agents can try the command without a mesh; your own are modelled on `sasori reference-body`.
 #   fit: none (rigid; slides along the bone until clear of the body) | wrap (radial scale to hug a limb) |
 #        chest / neck (the lower part settles onto the chest) | pierce (rigid and left exactly where it is,
 #        through the body: earrings, nose rings); hang: extra bones for a dangling part

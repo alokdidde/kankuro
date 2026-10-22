@@ -9,15 +9,15 @@ import numpy as np
 from test_cli import cc
 
 try:
-    import bpy  # noqa: F401  (loads mathutils for the kankuro.blender modules)
+    import bpy  # noqa: F401  (loads mathutils for the sasori.blender modules)
 except ImportError:  # pragma: no cover
     bpy = None
 
 
 def _build(project):
     """Build a project's character in this process; returns the Built scene."""
-    from kankuro import spec as specmod
-    from kankuro.blender import build
+    from sasori import spec as specmod
+    from sasori.blender import build
     spec = specmod.load(project)
     return build.build_scene(spec, project, tempfile.mkdtemp())
 
@@ -34,7 +34,7 @@ def _saree_woman(tmp, fabric="cotton"):
 class Saree(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        from kankuro.blender import drape, util
+        from sasori.blender import drape, util
         cls.tmp = tempfile.mkdtemp()
         p = _saree_woman(cls.tmp)
         cc("set", "export.hide_body_under_clothes=false", project=p)  # measure against the whole skin
@@ -53,7 +53,7 @@ class Saree(unittest.TestCase):
         cls.P = cap["co"]
 
     def _surfaces(self):
-        from kankuro.blender import garments
+        from sasori.blender import garments
         blouse = next(m for m in self.b.meshes if m.get("garment_id") == "blouse")
         return garments.body_bvh(self.b.body), garments.mesh_bvh([blouse])
 
@@ -79,7 +79,7 @@ class Saree(unittest.TestCase):
     def test_pallu_lies_on_the_back(self):
         """#3: down the back the pallu touches the back and seat instead of standing off as a board,
         and its hanging end is a level hem."""
-        from kankuro.blender import drape
+        from sasori.blender import drape
         from mathutils import Vector
         body, _ = self._surfaces()
         bones = self.b.arm.data.bones
@@ -96,7 +96,7 @@ class SkirtInMotion(unittest.TestCase):
     def test_skirt_follows_both_thighs_not_the_knees(self):
         """Skirts hang as one tube: the centre front is shared by both thighs, and no calf/foot
         weights on the front (the knee mustn't fold the cloth like a trouser leg)."""
-        from kankuro.blender import util
+        from sasori.blender import util
         b = _build(_saree_woman(tempfile.mkdtemp(), fabric="none"))
         saree = next(m for m in b.meshes if m.get("garment_id") == "saree")
         W = util.weight_matrix(saree, b.res.bones)
@@ -115,7 +115,7 @@ class SkirtInMotion(unittest.TestCase):
 
 def _uv_area_ratios(obj, scale):
     """Per-face UV area / (3D area x scale^2) over a garment's outer shell (1 = no squash)."""
-    from kankuro.blender import util
+    from sasori.blender import util
     me = obj.data
     co = util.get_coords(obj)
     uv = me.uv_layers["UVMap"].data
@@ -145,7 +145,7 @@ class TraditionalDress(unittest.TestCase):
         cls.g = {m.get("garment_id"): m for m in cls.b.meshes if m.get("garment_id")}
 
     def test_cotton_is_woven_and_tshirts_are_jersey(self):
-        from kankuro import catalog, fabric
+        from sasori import catalog, fabric
         self.assertEqual(fabric.FABRICS["cotton"]["kind"], "plain")
         self.assertEqual(fabric.FABRICS["jersey"]["kind"], "jersey")
         self.assertEqual(catalog.GARMENTS["tshirt"]["fabric"], "jersey")
@@ -153,7 +153,7 @@ class TraditionalDress(unittest.TestCase):
 
     def test_uvs_are_not_squashed(self):
         """The fuzzy/ribbed patches came from faces squeezed to slivers in the UV layout."""
-        from kankuro.blender import dhoti
+        from sasori.blender import dhoti
         for gid in ("dhoti", "kurta"):
             r = _uv_area_ratios(self.g[gid], self.b.uv_info[gid]["scale_px_per_m"])
             if gid == "dhoti":  # the pleat panel (joined last) reuses the folded cloth's UVs
@@ -161,7 +161,7 @@ class TraditionalDress(unittest.TestCase):
             self.assertGreater(np.percentile(r, 2), 0.2, gid)
 
     def test_kurta_is_over_the_dhoti_and_knee_length(self):
-        from kankuro.blender import garments, util
+        from sasori.blender import garments, util
         from mathutils import Vector
         bones = self.b.arm.data.bones
         z_hip, z_knee = bones["thigh_l"].head_local.z, bones["calf_l"].head_local.z
@@ -186,7 +186,7 @@ class TraditionalDress(unittest.TestCase):
         self.assertTrue(0 < pk["u"] < 0.5 and 0 < pk["v"] < 1)  # front half of the template
 
     def test_dhoti_has_front_pleats(self):
-        from kankuro.blender import util
+        from sasori.blender import util
         d = util.get_coords(self.g["dhoti"])
         bones = self.b.arm.data.bones
         z_knee = bones["calf_l"].head_local.z
