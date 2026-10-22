@@ -8,14 +8,14 @@ import numpy as np
 from test_cli import cc
 
 try:
-    import bpy  # noqa: F401  (loads mathutils for the kankuro.blender modules)
+    import bpy  # noqa: F401  (loads mathutils for the sasori.blender modules)
 except ImportError:  # pragma: no cover
     bpy = None
 
 
 def _build(project):
-    from kankuro import spec as specmod
-    from kankuro.blender import build
+    from sasori import spec as specmod
+    from sasori.blender import build
     return build.build_scene(specmod.load(project), project, tempfile.mkdtemp())
 
 
@@ -46,7 +46,7 @@ def _signed(bvh, pts):
 def _necklace(path):
     """A simple torus necklace modelled on the reference body, round the neck and down onto the chest."""
     import math
-    from kankuro.blender import accessories, build, util
+    from sasori.blender import accessories, build, util
     ref = build.reference_body()
     nb = ref.arm.data.bones["neck_01"]
     c = np.array(nb.head_local) + np.array([0, -0.035, -0.06])
@@ -98,7 +98,7 @@ class Accessories(unittest.TestCase):
         cc("catalog", "presets")  # still fine
 
     def test_fits_on_every_body(self):
-        from kankuro.blender import garments, util
+        from sasori.blender import garments, util
         for preset, sets in self.BODIES:
             with self.subTest(body=preset, sets=sets):
                 p = _project(preset, *sets)
@@ -121,7 +121,7 @@ class Accessories(unittest.TestCase):
                 self.assertLess(np.median(d[front]), 0.008)
 
     def test_rigid_follows_one_bone_and_presses_the_hair(self):
-        from kankuro.blender import build, util
+        from sasori.blender import build, util
         p = _project("female")
         cc("hair", "set", "short", project=p)
         self._dress(p)
@@ -156,7 +156,7 @@ class Accessories(unittest.TestCase):
         deep = (r - rin) >= 0.002
         if deep.any():
             from mathutils import Vector
-            from kankuro.blender import garments
+            from sasori.blender import garments
             bvh = garments.body_bvh(b.body)
             skin = np.array([bvh.find_nearest(Vector(q))[3] for q in hair[band][deep]])
             self.assertLess(skin.max(), 0.0016)
@@ -200,7 +200,7 @@ class Props(unittest.TestCase):
         """How deep the fingers of `side` go into `prop` (m, 0 = not at all), in the current pose."""
         from mathutils.bvhtree import BVHTree
         from mathutils import Vector
-        from kankuro.blender import util
+        from sasori.blender import util
         # the thumb's base (thumb_01) is palm flesh, pressed against the grip like the palm
         fingers = [f"{n}_0{k}_{side}" for n in ("thumb", "index", "middle", "ring", "pinky") for k in (1, 2, 3)
                    if (n, k) != ("thumb", 1)]
@@ -212,14 +212,14 @@ class Props(unittest.TestCase):
         return max(0.0, -_signed(bvh, pts).min())
 
     def _in_hand(self, b, prop, side):
-        from kankuro.blender import util
+        from sasori.blender import util
         o = next(m for m in b.meshes if m.get("prop_id") == prop)
         co = util.get_coords(o, evaluated=True)
         M = np.array(b.arm.matrix_world @ b.arm.pose.bones[f"hand_{side}"].matrix)
         return (np.linalg.inv(M) @ np.c_[co, np.ones(len(co))].T).T[:, :3]
 
     def test_grip_without_finger_penetration_through_walk(self):
-        from kankuro.blender import build, props
+        from sasori.blender import build, props
         b = self.b
         props.pose_grips(b)
         rest = {k: self._in_hand(b, k, s) for k, s in (("staff", "r"), ("handle", "l"))}
@@ -244,11 +244,11 @@ class Props(unittest.TestCase):
         chk = {c["check"]: c for c in v["checks"]}
         self.assertEqual(chk["extra_bones"]["detail"]["by_parent"], {"hand_l": ["prop_l"], "hand_r": ["prop_r"]})
         import bpy
-        from kankuro.blender import util
+        from sasori.blender import util
         util.reset_scene()
         bpy.ops.import_scene.gltf(filepath=out["glb"])
         act = next(a for a in bpy.data.actions if a.name.startswith("Walk"))
-        from kankuro.blender import motion
+        from sasori.blender import motion
         q = motion.read_quats(act, "middle_02_r", [act.frame_range[0], act.frame_range[1]])
         self.assertGreater(np.degrees(2 * np.arccos(min(1.0, abs(q[0, 0])))), 20)  # curled on every frame
 
@@ -262,7 +262,7 @@ class Props(unittest.TestCase):
 class TwoHands(unittest.TestCase):
     def test_flute_second_hand_on_idle(self):
         from mathutils import Vector
-        from kankuro.blender import build, motion
+        from sasori.blender import build, motion
         p = _project("male")
         cc("prop", "add", "flute", project=p)
         b = _build(p)
@@ -296,12 +296,12 @@ class ExtraBones(unittest.TestCase):
         self.assertEqual(cc("bones", "list", project=p)["extra_bones"], [])
 
     def test_no_extra_bones_keeps_the_skeleton(self):
-        from kankuro.blender import rig
+        from sasori.blender import rig
         b = _build(_project("male"))
         self.assertEqual(sorted(x.name for x in b.arm.data.bones), sorted(rig.m2m_bone_names()))
 
     def _sim(self, clip):
-        from kankuro.blender import anim, motion
+        from sasori.blender import anim, motion
         b = self.b
         anim.pose_at(b.arm, clip, 0)
         act = b.arm.animation_data.action.copy()
@@ -325,7 +325,7 @@ class ExtraBones(unittest.TestCase):
         self.assertGreater(max(deg(q[0], x) for q in jog.values() for x in q), 10.0)
 
     def test_tail_stays_out_of_the_legs(self):
-        from kankuro.blender import build, motion, util
+        from sasori.blender import build, motion, util
         b = self.b
         tail = next(m for m in b.meshes if m.get("extra_chain") == "tail")
         for clip in ("Walk", "Jog"):
@@ -349,7 +349,7 @@ class ExtraBones(unittest.TestCase):
         self.assertEqual(chk["rest_orientation_matches_m2m"]["pass"], True)
 
     def test_braid_follows_the_hair(self):
-        from kankuro.blender import util
+        from sasori.blender import util
         p = _project("female")
         cc("hair", "set", "indian_braid", project=p)
         cc("bones", "add", "braid", "--parent", "head", "--count", "5", "--follow", "hair", project=p)
@@ -368,7 +368,7 @@ class AutorigExtras(unittest.TestCase):
         cc("reference-body", "--out", ref)
         src = os.path.join(d, "tailed.glb")
         import bpy
-        from kankuro.blender import util
+        from sasori.blender import util
         util.reset_scene()
         bpy.ops.import_scene.gltf(filepath=ref)
         for o in list(bpy.data.objects):

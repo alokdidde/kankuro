@@ -10,7 +10,7 @@ import numpy as np
 from test_cli import cc
 
 try:
-    import bpy  # noqa: F401  (loads mathutils for the kankuro.blender modules)
+    import bpy  # noqa: F401  (loads mathutils for the sasori.blender modules)
 except ImportError:  # pragma: no cover
     bpy = None
 
@@ -35,7 +35,7 @@ class Presets(unittest.TestCase):
         self.assertEqual(set(out["regions"]) & {"border", "hem"}, {"border", "hem"})
 
     def test_resolve_overrides(self):
-        from kankuro import matlib
+        from sasori import matlib
         self.assertEqual(matlib.resolve("gem", color="#1f5fbf")["color"], "#1f5fbf")
         r = matlib.resolve({"preset": "gold", "roughness": 0.5})
         self.assertEqual((r["roughness"], r["metallic"]), (0.5, 1.0))
@@ -67,8 +67,8 @@ class Presets(unittest.TestCase):
         g = cc("garment", "set", "tshirt", "--material-region", "trim=silver", "--mask", mask, project=p)["garment"]
         self.assertTrue(g["material_regions"]["trim"]["mask"].startswith("assets/textures/"))
         # a hand-edited spec is checked too
-        from kankuro import spec as specmod
-        from kankuro.errors import CliError
+        from sasori import spec as specmod
+        from sasori.errors import CliError
         s = specmod.load(p)
         s["garments"][0]["material"] = "steal"
         with self.assertRaises(CliError) as e:
@@ -81,7 +81,7 @@ class RegionBake(unittest.TestCase):
 
     def test_zari_keeps_the_weave_and_tints_only_the_region(self):
         from PIL import Image
-        from kankuro import fabric, matlib
+        from sasori import fabric, matlib
         d = tempfile.mkdtemp()
         size = 256
         mask = np.zeros((size, size), bool)
@@ -147,7 +147,7 @@ class MaterialBuild(unittest.TestCase):
 class EdgeDistance(unittest.TestCase):
     def test_saree_border_skips_the_tucked_waist(self):
         from test_garments import _build, _saree_woman
-        from kankuro.blender import drape, garments, util
+        from sasori.blender import drape, garments, util
         b = _build(_saree_woman(tempfile.mkdtemp()))
         saree = next(m for m in b.meshes if m.get("garment_id") == "saree")
         d = garments.edge_distance(saree, "border", cap=0.2, uv_scale=b.uv_info["saree"]["scale_px_per_m"])

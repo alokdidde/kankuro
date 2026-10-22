@@ -5,7 +5,7 @@ import unittest
 import numpy as np
 
 try:
-    import bpy  # noqa: F401  (loads mathutils for the kankuro.blender modules)
+    import bpy  # noqa: F401  (loads mathutils for the sasori.blender modules)
 except ImportError:  # pragma: no cover
     bpy = None
 
@@ -14,8 +14,8 @@ except ImportError:  # pragma: no cover
 class HairCoverage(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        from kankuro import spec as specmod
-        from kankuro.blender import body, hair, util
+        from sasori import spec as specmod
+        from sasori.blender import body, hair, util
         util.reset_scene()
         sp = specmod.default_spec(preset="female")
         cls.res = body.build(sp["body"].get("macros"), {}, None, face_keys=())
@@ -33,7 +33,7 @@ class HairCoverage(unittest.TestCase):
     def _coverage(self, style):
         """Per body vertex: 1 where the hair's base layer is over the skin (ray along the skin normal)."""
         import bpy as _bpy
-        from kankuro.blender import hair
+        from sasori.blender import hair
         h = hair.make(self.res, self.body, style)
         try:
             return hair.coverage_mask(self.res, h, smooth=0)[self.verts]
@@ -55,7 +55,7 @@ class HairCoverage(unittest.TestCase):
             self.assertGreater(sel.sum(), 10, name)
 
     def test_every_style_covers_the_nape_and_behind_the_ears(self):
-        from kankuro import catalog
+        from sasori import catalog
         regions = self._regions()
         for style in catalog.HAIR_STYLES:
             with self.subTest(style=style):
@@ -70,7 +70,7 @@ class HairCoverage(unittest.TestCase):
 
     def test_nape_hair_lies_on_the_neck(self):
         """The base layer under the skull follows the hollow of the nape instead of bridging it."""
-        from kankuro.blender import garments, hair, util
+        from sasori.blender import garments, hair, util
         import bpy as _bpy
         h = hair.make(self.res, self.body, "short")
         try:

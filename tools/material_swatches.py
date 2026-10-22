@@ -11,8 +11,8 @@ from PIL import Image
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
-from kankuro import matlib  # noqa: E402
-from kankuro.blender import materials, render  # noqa: E402
+from sasori import matlib  # noqa: E402
+from sasori.blender import materials, render  # noqa: E402
 
 
 def main():

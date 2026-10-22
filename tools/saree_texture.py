@@ -1,4 +1,4 @@
-"""Paint a simple silk-saree texture on the kankuro saree UV template (no image model):
+"""Paint a simple silk-saree texture on the sasori saree UV template (no image model):
 body colour with small gold buttis, a gold zari border along the skirt hem and both pallu edges,
 and a decorated pallu end. Usage: saree_texture.py MASK.png OUT.png"""
 import sys

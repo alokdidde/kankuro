@@ -1,36 +1,36 @@
-# Using kankuro from an AI agent
+# Using sasori from an AI agent
 
-kankuro was built to be driven by agents (Claude Code, Codex, Cursor, your own tool-calling loop).
+sasori was built to be driven by agents (Claude Code, Codex, Cursor, your own tool-calling loop).
 This page is what an agent needs to know. You can paste the [system prompt snippet](#system-prompt-snippet)
 at the bottom straight into an agent's instructions.
 
 ## The contract
 
-* **One JSON object on stdout per command.** Parse it. Never scrape logs. Set `KANKURO_COMPACT=1`
+* **One JSON object on stdout per command.** Parse it. Never scrape logs. Set `SASORI_COMPACT=1`
   for single-line output.
 * **`ok` first.** `true` means done. `false` means read `error.code` (stable, branch on it),
   `error.message` and `error.hint` (usually says exactly what to run instead).
 * **Exit code 2** is your mistake (bad name, bad value, missing file). Fix the input and retry.
-  **Exit code 1** is a kankuro bug: `error.traceback` and `<project>/build/blender.log` explain it.
-* **State lives in `character.json`.** Commands are idempotent edits of it. `kankuro show` prints it.
+  **Exit code 1** is a sasori bug: `error.traceback` and `<project>/build/blender.log` explain it.
+* **State lives in `character.json`.** Commands are idempotent edits of it. `sasori show` prints it.
   Nothing is hidden in a cache or a session.
-* **Discover, don't guess.** `kankuro --help` and `kankuro <command> --help` (options plus worked
-  examples), `kankuro guide` (this guide; `kankuro guide --list` for the CLI reference, spec format
-  and texture guide), `kankuro schema` (all commands as JSON), `kankuro catalog` (presets, sliders,
-  hair, garments, fabrics, colours), `kankuro morphs --search <text>`, `kankuro animations`.
-* **Look at your work.** `kankuro render` writes PNGs. An agent that can read images should open
+* **Discover, don't guess.** `sasori --help` and `sasori <command> --help` (options plus worked
+  examples), `sasori guide` (this guide; `sasori guide --list` for the CLI reference, spec format
+  and texture guide), `sasori schema` (all commands as JSON), `sasori catalog` (presets, sliders,
+  hair, garments, fabrics, colours), `sasori morphs --search <text>`, `sasori animations`.
+* **Look at your work.** `sasori render` writes PNGs. An agent that can read images should open
   `renders/render_sheet.png` after visible changes.
 
 ## A good loop
 
 ```text
-1. kankuro guide; kankuro catalog                  # learn the contract and what exists
-2. kankuro init <dir> --preset <closest preset>
-3. kankuro set ... / face ... / skin / eyes / brows / hair set ... / garment add ...  # rough pass from the brief
-4. kankuro render                                   # look at render_sheet.png
+1. sasori guide; sasori catalog                  # learn the contract and what exists
+2. sasori init <dir> --preset <closest preset>
+3. sasori set ... / face ... / skin / eyes / brows / hair set ... / garment add ...  # rough pass from the brief
+4. sasori render                                   # look at render_sheet.png
 5. compare with the brief; adjust with set / garment set; render again
    (use --focus head for faces, --animation Jog --frame 0.3 for clothing in motion)
-6. kankuro build --animations <clips>; kankuro validate <glb>
+6. sasori build --animations <clips>; sasori validate <glb>
 7. report the GLB path, the sheet PNG and the manifest's warnings
 ```
 
@@ -62,15 +62,15 @@ Keep renders cheap while iterating (`--size 384 --samples 8`) and raise them for
 
 Age slider values: 0.1875 ≈ 10 years, 0.5 = 25, 0.75 ≈ 57, 1.0 = 90.
 
-## Textures need an image model, outside kankuro
+## Textures need an image model, outside sasori
 
-kankuro never calls an image model and needs no API key. When a texture is needed:
+sasori never calls an image model and needs no API key. When a texture is needed:
 
-1. `kankuro template <garment>` gives `<id>_template.png` and `<id>_mask.png`.
+1. `sasori template <garment>` gives `<id>_template.png` and `<id>_mask.png`.
 2. Hand the template to whatever image model you have, with a prompt from
    [codex-textures.md](codex-textures.md). Keep the output the same size and layout.
-3. `kankuro garment set <id> --texture <png>` (plus `--height <png>` for relief).
-4. `kankuro render --views front,back` and check it.
+3. `sasori garment set <id> --texture <png>` (plus `--height <png>` for relief).
+4. `sasori render --views front,back` and check it.
 
 If no image model is available, a plain `--color` with a `--fabric` preset still looks like cloth.
 
@@ -78,11 +78,11 @@ If no image model is available, a plain `--color` with a `--fabric` preset still
 
 | mistake | result | fix |
 |---|---|---|
-| `kankuro build -p ./hero` | `bad_arguments` | `-p` goes before the command: `kankuro -p ./hero build` |
+| `sasori build -p ./hero` | `bad_arguments` | `-p` goes before the command: `sasori -p ./hero build` |
 | unquoted morph name | the shell treats `|` as a pipe | quote the whole assignment |
 | `--color #ff0000` unquoted in some shells | `#` starts a comment, colour missing | `--color "#ff0000"` |
 | two tops without `--keep-slot` | the first is replaced (see `replaced`) | add `--keep-slot` to layer them |
-| `set hair.style=bob` | `bad_path` | `kankuro hair set bob` |
+| `set hair.style=bob` | `bad_path` | `sasori hair set bob` |
 | `--animations all` on every build | big, slow GLB | list the clips you need |
 
 ## Performance
@@ -94,21 +94,21 @@ independent processes, so separate projects can be built in parallel.
 ## System prompt snippet
 
 ```text
-You can build rigged 3D characters with the `kankuro` CLI.
+You can build rigged 3D characters with the `sasori` CLI.
 - Every command prints one JSON object. Check "ok"; on failure read error.code and error.hint and fix the input.
-- Start with `kankuro guide` and `kankuro catalog`; `kankuro <command> --help` shows options and examples.
+- Start with `sasori guide` and `sasori catalog`; `sasori <command> --help` shows options and examples.
   Never guess names; use `catalog`, `morphs --search`, `face list`, `animations`.
-- A project is a folder with character.json. Create it with `kankuro init <dir> --preset <preset>`.
+- A project is a folder with character.json. Create it with `sasori init <dir> --preset <preset>`.
   Put -p <dir> BEFORE the command, or cd into the folder.
-- Shape with `kankuro set body.macros.<slider>=<0..1>` and `body.height_cm=<cm>`; quote morph names: "body.morphs.<name>=<v>".
-- Face: every character needs its own face. Use `kankuro face preset <archetype>`, `kankuro face randomize --seed N`
-  and `kankuro face set <group.slider>=<-1..1>` (`kankuro face list`). Eyes: `kankuro eyes --color <name|#hex> tilt=..`.
-  Eyebrows: `kankuro brows --preset <name> --color <name|#hex>`. Skin: `kankuro skin --color <name|#hex>`.
-- Hair: `kankuro hair set <style> --color "#hex"`. Clothes: `kankuro garment add <type> --color "#hex" [--fabric name]`.
-- Jewellery: `kankuro accessory add <built-in|id --file mesh --bone B>`. Held objects: `kankuro prop add <name>`.
-  Tails and swinging braids: `kankuro bones add <id> --parent <bone>`. The 65 standard bones never change.
-- After visible changes run `kankuro render` and look at renders/render_sheet.png. Use --focus head for faces.
-- Custom fabric prints: `kankuro template <id>`, get the image painted on that template outside kankuro,
-  then `kankuro garment set <id> --texture <png>`.
-- Finish with `kankuro build --animations Idle_A,Walk` and `kankuro validate <glb>`; report the GLB path and any warnings.
+- Shape with `sasori set body.macros.<slider>=<0..1>` and `body.height_cm=<cm>`; quote morph names: "body.morphs.<name>=<v>".
+- Face: every character needs its own face. Use `sasori face preset <archetype>`, `sasori face randomize --seed N`
+  and `sasori face set <group.slider>=<-1..1>` (`sasori face list`). Eyes: `sasori eyes --color <name|#hex> tilt=..`.
+  Eyebrows: `sasori brows --preset <name> --color <name|#hex>`. Skin: `sasori skin --color <name|#hex>`.
+- Hair: `sasori hair set <style> --color "#hex"`. Clothes: `sasori garment add <type> --color "#hex" [--fabric name]`.
+- Jewellery: `sasori accessory add <built-in|id --file mesh --bone B>`. Held objects: `sasori prop add <name>`.
+  Tails and swinging braids: `sasori bones add <id> --parent <bone>`. The 65 standard bones never change.
+- After visible changes run `sasori render` and look at renders/render_sheet.png. Use --focus head for faces.
+- Custom fabric prints: `sasori template <id>`, get the image painted on that template outside sasori,
+  then `sasori garment set <id> --texture <png>`.
+- Finish with `sasori build --animations Idle_A,Walk` and `sasori validate <glb>`; report the GLB path and any warnings.
 ```

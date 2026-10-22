@@ -1,7 +1,7 @@
 # The character spec (`character.json`)
 
 A project's whole character is one JSON file. The CLI commands edit it for you and validate every
-change, but you can also write it by hand or generate it, then run `kankuro build`. Every command
+change, but you can also write it by hand or generate it, then run `sasori build`. Every command
 that loads the project checks it, so a mistake shows up as a normal JSON error with a hint.
 
 ## Example
@@ -67,7 +67,7 @@ that loads the project checks it, so a mistake shows up as a normal JSON error w
 |---|---|---|
 | `preset` | string | the preset the sliders started from (informational once sliders change) |
 | `macros` | object | body sliders, each 0..1. Missing sliders use their defaults. See [cli-reference.md#set](cli-reference.md#set) for the list. |
-| `morphs` | object | detailed morphs, `name: value`. Names come from `kankuro morphs`. Two-sided morphs (`a|b` in the name) take −1..1, one-sided ones 0..1. |
+| `morphs` | object | detailed morphs, `name: value`. Names come from `sasori morphs`. Two-sided morphs (`a|b` in the name) take −1..1, one-sided ones 0..1. |
 | `height_cm` | number or `null` | exact standing height, 50 to 250. `null` lets the `height` slider decide. |
 
 ### `skin`
@@ -75,7 +75,7 @@ that loads the project checks it, so a mistake shows up as a normal JSON error w
 | field | type | default | meaning |
 |---|---|---|---|
 | `color` | hex | `#d8a383` | whole-body skin tone (commands also accept names like `tan`, stored as hex) |
-| `texture` | path or `null` | `null` | PNG on the body UV layout (`kankuro template body`); replaces the flat tone |
+| `texture` | path or `null` | `null` | PNG on the body UV layout (`sasori template body`); replaces the flat tone |
 | `roughness` | number | 0.6 | material roughness |
 | `lips` | bool | true | tint the lips |
 | `brows` | bool | true | eyebrows on or off (individual strand cards, see [hair](cli-reference.md#hair)) |
@@ -85,7 +85,7 @@ that loads the project checks it, so a mistake shows up as a normal JSON error w
 | `brow_density` | 0.2..2 | 1.0 | hair count (0.4 sparse, 1.6 dense) |
 | `brow_length` | 0.5..1.4 | 1.0 | how far the tail reaches toward the temple |
 
-`kankuro brows` sets the last five (with presets); see [cli-reference.md#brows](cli-reference.md#brows).
+`sasori brows` sets the last five (with presets); see [cli-reference.md#brows](cli-reference.md#brows).
 
 ### `eyes`
 
@@ -98,7 +98,7 @@ that loads the project checks it, so a mistake shows up as a normal JSON error w
 | field | type | default | meaning |
 |---|---|---|---|
 | `blendshapes` | `arkit52` or `none` | `arkit52` | export the 52 ARKit facial blendshapes as morph targets |
-| `shape` | object | `{}` | face sliders, `"group.name": value` (e.g. `"nose.width": 0.4`); merged into `body.morphs` at build time. Names and ranges: `kankuro face list` or [cli-reference.md#face](cli-reference.md#face) |
+| `shape` | object | `{}` | face sliders, `"group.name": value` (e.g. `"nose.width": 0.4`); merged into `body.morphs` at build time. Names and ranges: `sasori face list` or [cli-reference.md#face](cli-reference.md#face) |
 | `seed` | int | absent | the seed of the last `face randomize` |
 
 ### `hair`
@@ -123,7 +123,7 @@ with a `source`.
 | field | type | meaning |
 |---|---|---|
 | `id` | string | unique in the project; commands use it |
-| `type` | string | a garment type from `kankuro catalog garments`, or `custom` for an imported mesh |
+| `type` | string | a garment type from `sasori catalog garments`, or `custom` for an imported mesh |
 | `source` | path | imported mesh (only for `custom`) |
 | `color` | hex | base colour (multiplies the texture) |
 | `texture` | path | albedo on the garment's UV template |
@@ -139,7 +139,7 @@ with a `source`.
 
 ### `accessories[]`
 
-Written by [`kankuro accessory`](cli-reference.md#accessory).
+Written by [`sasori accessory`](cli-reference.md#accessory).
 
 | field | type | meaning |
 |---|---|---|
@@ -155,7 +155,7 @@ Written by [`kankuro accessory`](cli-reference.md#accessory).
 
 ### `props[]`
 
-Written by [`kankuro prop`](cli-reference.md#prop).
+Written by [`sasori prop`](cli-reference.md#prop).
 
 | field | type | meaning |
 |---|---|---|
@@ -163,14 +163,14 @@ Written by [`kankuro prop`](cli-reference.md#prop).
 | `file` / `builtin` | path / string | a mesh held in the T-posed reference hand, or a built-in (`handle`, `staff`, `flute`) |
 | `hand` | `l`, `r`, `both` | which hand holds it |
 | `anchor` | `l`, `r` | with `both`: the hand it hangs from |
-| `grip` | string | finger pose from `kankuro grip list` |
+| `grip` | string | finger pose from `sasori grip list` |
 | `grip_weight` | 0..1 | how much the grip replaces the clip's fingers (default 1) |
 | `reach` | number | with `both`: metres along the prop to the other hand |
 | `offset`, `rotate`, `scale`, `material`, `color`, `roughness` | | as for accessories |
 
 ### `extra_bones[]`
 
-Written by [`kankuro bones`](cli-reference.md#bones). Bones are named `<id>_01` ... `<id>_<count>`.
+Written by [`sasori bones`](cli-reference.md#bones). Bones are named `<id>_01` ... `<id>_<count>`.
 
 | field | type | default | meaning |
 |---|---|---|---|
@@ -202,11 +202,11 @@ spec by hand, put the files inside the project yourself. A missing file fails wi
 ## Editing by hand
 
 ```bash
-kankuro show > /dev/null          # check the current spec is valid
+sasori show > /dev/null          # check the current spec is valid
 $EDITOR character.json
-kankuro show                      # validates it again; errors explain what's wrong
-kankuro build
+sasori show                      # validates it again; errors explain what's wrong
+sasori build
 ```
 
-`kankuro set` can't reach garments or hair (use `garment set` and `hair set`), but editing those
+`sasori set` can't reach garments or hair (use `garment set` and `hair set`), but editing those
 entries in the JSON directly is fine.

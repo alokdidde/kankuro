@@ -3,10 +3,10 @@
 Every command and option, with what it prints. For a guided walk-through, start with
 [getting-started.md](getting-started.md).
 
-The command is `kankuro`. `python -m kankuro` does the same thing.
+The command is `sasori`. `python -m sasori` does the same thing.
 
 ```
-kankuro [-p PROJECT] [--version] <command> [options]
+sasori [-p PROJECT] [--version] <command> [options]
 ```
 
 ## Contents
@@ -43,7 +43,7 @@ log never reaches stdout.
 
 * `ok` tells you whether it worked. On failure, `error.code` is a stable identifier you can branch
   on, `error.message` says what went wrong and `error.hint` usually says how to fix it.
-* Output is pretty-printed. Set `KANKURO_COMPACT=1` to get one line per command, which is easier
+* Output is pretty-printed. Set `SASORI_COMPACT=1` to get one line per command, which is easier
   to parse from scripts.
 
 ### Exit codes
@@ -60,8 +60,8 @@ A **project** is a folder with a `character.json` in it (the spec, see
 [character-spec.md](character-spec.md)). Commands that work on a character find the project in this
 order:
 
-1. `-p DIR` / `--project DIR` (goes **before** the command: `kankuro -p ./hero build`)
-2. the `KANKURO_PROJECT` environment variable
+1. `-p DIR` / `--project DIR` (goes **before** the command: `sasori -p ./hero build`)
+2. the `SASORI_PROJECT` environment variable
 3. the current directory
 
 `init`, `catalog`, `morphs`, `animations`, `reference-body`, `autorig`, `validate` and `schema` don't
@@ -110,7 +110,7 @@ These only edit `character.json`. They are instant and don't start Blender.
 Create a project.
 
 ```
-kankuro init <dir> [--preset PRESET] [--name NAME] [--force]
+sasori init <dir> [--preset PRESET] [--name NAME] [--force]
 ```
 
 | option | default | meaning |
@@ -124,7 +124,7 @@ Prints `{"project": "<abs dir>", "spec": {...}}`. Fails with `exists` if the fol
 spec and `--force` wasn't given.
 
 ```bash
-kankuro init ./ava --preset athletic_female --name Ava
+sasori init ./ava --preset athletic_female --name Ava
 ```
 
 ### show
@@ -132,7 +132,7 @@ kankuro init ./ava --preset athletic_female --name Ava
 Print the spec, plus the last build's manifest if there is one.
 
 ```
-kankuro show
+sasori show
 ```
 
 Prints `{"project", "spec", "last_build"?}`.
@@ -142,7 +142,7 @@ Prints `{"project", "spec", "last_build"?}`.
 Change one or more values in the spec.
 
 ```
-kankuro set PATH=VALUE [PATH=VALUE ...]
+sasori set PATH=VALUE [PATH=VALUE ...]
 ```
 
 Values are parsed as JSON when they can be (`0.6`, `183`, `true`, `null`), otherwise as a string.
@@ -182,10 +182,10 @@ Values are parsed as JSON when they can be (`0.6`, `183`, `true`, `null`), other
 | `breast_firmness` | 0.5 | 0 = soft, 1 = firm |
 
 ```bash
-kankuro set body.macros.gender=0.9 body.macros.muscle=0.7 body.height_cm=183 \
+sasori set body.macros.gender=0.9 body.macros.muscle=0.7 body.height_cm=183 \
             skin.color=#8d5524 eyes.iris_color=#3a6ea5
-kankuro set "body.morphs.nose/nose-scale-horiz-decr|incr=0.4"   # quote: the name has a |
-kankuro set body.height_cm=null                                   # back to slider height
+sasori set "body.morphs.nose/nose-scale-horiz-decr|incr=0.4"   # quote: the name has a |
+sasori set body.height_cm=null                                   # back to slider height
 ```
 
 Prints `{"changed": {...}, "spec": {...}}`. Errors: `bad_assignment`, `bad_path`, `bad_value`,
@@ -196,7 +196,7 @@ Prints `{"changed": {...}, "spec": {...}}`. Errors: `bad_assignment`, `bad_path`
 List what's available.
 
 ```
-kankuro catalog [presets|body_sliders|face_sliders|face_presets|colors|brows|hair_styles|garments|fabrics|materials|expressions]
+sasori catalog [presets|body_sliders|face_sliders|face_presets|colors|brows|hair_styles|garments|fabrics|materials|expressions]
 ```
 
 With no section it prints everything. Garment entries include `slot`, `layer` and default
@@ -208,7 +208,7 @@ built-in regions. `expressions` lists the 52 ARKit blendshape names and the expr
 List the 238 detailed MakeHuman morphs (face, torso, limbs, ...).
 
 ```
-kankuro morphs [--group GROUP] [--search TEXT]
+sasori morphs [--group GROUP] [--search TEXT]
 ```
 
 Groups: `armslegs`, `breast`, `buttocks`, `cheek`, `chin`, `ears`, `eyebrows`, `eyes`, `forehead`,
@@ -219,9 +219,9 @@ take −1..1: negative moves towards the first word, positive towards the second
 take 0..1.
 
 ```bash
-kankuro morphs --group nose
-kankuro morphs --search jaw
-kankuro set "body.morphs.chin/chin-prognathism-decr|incr=0.3"
+sasori morphs --group nose
+sasori morphs --search jaw
+sasori set "body.morphs.chin/chin-prognathism-decr|incr=0.3"
 ```
 
 ### skin
@@ -229,13 +229,13 @@ kankuro set "body.morphs.chin/chin-prognathism-decr|incr=0.3"
 Whole-body skin tone, a painted skin texture, and eyebrow colour.
 
 ```
-kankuro skin [--color HEX|NAME] [--texture PNG | --texture ""] [--brow-color HEX|NAME] [--detail true|false]
+sasori skin [--color HEX|NAME] [--texture PNG | --texture ""] [--brow-color HEX|NAME] [--detail true|false]
 ```
 
 * `--color` takes `#RRGGBB` or a skin-tone name (see [Colour names](#colour-names)), e.g. `--color tan`.
   It colours the whole body. A `--texture` overrides it (the output then carries a `note`).
 
-* `--texture` takes a PNG painted on the body UV layout (`kankuro template body` gives the layout).
+* `--texture` takes a PNG painted on the body UV layout (`sasori template body` gives the layout).
   Pass an empty string to remove it.
 
 * `--detail true|false` (`skin.detail`, default `true`): natural tone variation under the colour
@@ -258,11 +258,11 @@ and `hair`.
 ### face
 
 ```
-kankuro face list [--group GROUP]
-kankuro face set SLIDER=VALUE [SLIDER=VALUE ...]
-kankuro face preset NAME [NAME ...] [--amount F] [--add]
-kankuro face randomize [--seed N] [--strength 0..1] [--groups G1,G2] [--add]
-kankuro face reset [--groups G1,G2]
+sasori face list [--group GROUP]
+sasori face set SLIDER=VALUE [SLIDER=VALUE ...]
+sasori face preset NAME [NAME ...] [--amount F] [--add]
+sasori face randomize [--seed N] [--strength 0..1] [--groups G1,G2] [--add]
+sasori face reset [--groups G1,G2]
 ```
 
 * `set` changes single sliders; out-of-range values are clamped, `0` or `null` removes one.
@@ -284,10 +284,10 @@ its range and description, the presets and the current values. Errors: `unknown_
 `hint` lists that group's sliders), `unknown_face_preset`, `bad_group`, `bad_value`.
 
 ```bash
-kankuro face preset angular
-kankuro face randomize --seed 7 --strength 0.3 --add      # angular, but its own person
-kankuro face set nose.hump=0.5 chin.cleft=0.4
-kankuro face randomize --groups eyes --seed 12            # new eyes only
+sasori face preset angular
+sasori face randomize --seed 7 --strength 0.3 --add      # angular, but its own person
+sasori face set nose.hump=0.5 chin.cleft=0.4
+sasori face randomize --groups eyes --seed 12            # new eyes only
 ```
 
 **Presets**
@@ -383,7 +383,7 @@ kankuro face randomize --groups eyes --seed 12            # new eyes only
 Iris colour and eye shape.
 
 ```
-kankuro eyes [--color HEX|NAME] [SLIDER=VALUE ...]
+sasori eyes [--color HEX|NAME] [SLIDER=VALUE ...]
 ```
 
 The sliders are the `eyes.*` face sliders, written with or without the prefix: `size`, `spacing`,
@@ -391,7 +391,7 @@ The sliders are the `eyes.*` face sliders, written with or without the prefix: `
 `bags`. Eye colour names: `dark_brown`, `brown`, `light_brown`, `amber`, `hazel`, `green`, `grey_green`, `grey`, `blue`, `light_blue`, `steel_blue`, `violet`, `red`, `gold`.
 
 ```bash
-kankuro eyes --color hazel tilt=0.4 monolid=0.5 size=0.2
+sasori eyes --color hazel tilt=0.4 monolid=0.5 size=0.2
 ```
 
 Prints `{"eyes": {"iris_color": ...}, "shape": {eyes.* sliders}, "sliders": {...}}`.
@@ -401,7 +401,7 @@ Prints `{"eyes": {"iris_color": ...}, "shape": {eyes.* sliders}, "sliders": {...
 Eyebrow hair shape and colour, and the brow-ridge sliders.
 
 ```
-kankuro brows [--preset NAME] [--color HEX|NAME|hair] [--thickness F] [--arch F] [--density F]
+sasori brows [--preset NAME] [--color HEX|NAME|hair] [--thickness F] [--arch F] [--density F]
               [--length F] [--on | --off] [SLIDER=VALUE ...]
 ```
 
@@ -430,8 +430,8 @@ A `--preset` sets all four shape values; options given with it override it.
 The sliders are the `brows.*` face sliders (the brow ridge under the hair): `height`, `tilt`, `ridge`.
 
 ```bash
-kankuro brows --preset arched --color dark_brown
-kankuro brows --thickness 1.3 --arch -0.5 ridge=0.3
+sasori brows --preset arched --color dark_brown
+sasori brows --thickness 1.3 --arch -0.5 ridge=0.3
 ```
 
 Prints `{"brows": {...}, "brow_color_used": ..., "ridge_shape": {...}, "presets": [...]}`.
@@ -439,7 +439,7 @@ Errors: `unknown_brow_preset`, `bad_value`, `bad_color`.
 
 ### Colour names
 
-Every colour option takes `#RRGGBB` or a name from its palette (`kankuro catalog colors` prints the
+Every colour option takes `#RRGGBB` or a name from its palette (`sasori catalog colors` prints the
 hex values):
 
 * **skin** (`skin --color`, `skin.color`): `porcelain`, `fair`, `light`, `light_olive`, `medium`, `olive`, `tan`, `golden_brown`, `brown`, `dark_brown`, `deep`, `ebony`, `pale_grey`, `orc_green`, `blue`
@@ -455,10 +455,10 @@ Garment `--color` accepts any of these names too.
 ### hair
 
 ```
-kankuro hair set <style> [--color HEX|NAME] [--texture PNG]
-kankuro hair set --color HEX|NAME          # recolour the current hair, keep the style
-kankuro hair import --file MESH [--color HEX] [--texture PNG]
-kankuro hair remove
+sasori hair set <style> [--color HEX|NAME] [--texture PNG]
+sasori hair set --color HEX|NAME          # recolour the current hair, keep the style
+sasori hair import --file MESH [--color HEX] [--texture PNG]
+sasori hair remove
 ```
 
 **Styles** (procedural, grown from the current scalp so they fit any head):
@@ -509,11 +509,11 @@ Prints `{"hair": {...}}` (`null` after `remove`).
 ### garment
 
 ```
-kankuro garment add <type> [--id ID] [--color HEX] [--texture PNG] [--fabric NAME] [--keep-slot] [surface options]
-kankuro garment import --file MESH --id ID [--color HEX] [--texture PNG] [surface options]
-kankuro garment set <id> [--color HEX] [--texture PNG|""] [--layer N] [--hide-body true|false] [surface options]
-kankuro garment set <id> [--material PRESET|none] [--material-region NAME=PRESET[:#RRGGBB]] [--mask PNG]
-kankuro garment remove <id>
+sasori garment add <type> [--id ID] [--color HEX] [--texture PNG] [--fabric NAME] [--keep-slot] [surface options]
+sasori garment import --file MESH --id ID [--color HEX] [--texture PNG] [surface options]
+sasori garment set <id> [--color HEX] [--texture PNG|""] [--layer N] [--hide-body true|false] [surface options]
+sasori garment set <id> [--material PRESET|none] [--material-region NAME=PRESET[:#RRGGBB]] [--mask PNG]
+sasori garment remove <id>
 ```
 
 **Slots.** Each garment type has a slot (`top`, `bottom`, `outer`, `feet`, `hands`, `head`, `shawl`).
@@ -569,7 +569,7 @@ Prints `{"garment": {...}, "garments": [...], "replaced"?: [...]}`.
 | `gloves` | hands | 2 | leather | full-finger gloves |
 | `turban` | head | 4 | canvas | wrapped turban (pagdi); pair with `buzz` hair |
 
-`kankuro catalog garments` always has the current list.
+`sasori catalog garments` always has the current list.
 
 Layers decide stacking whatever order garments are added in: a `kurta` (3) always sits over a `dhoti`
 or `churidar`, a `saree` (3) over its `blouse`. Skirt-like garments (`skirt`, `long_skirt`, `saree`,
@@ -577,15 +577,15 @@ the skirt of a `kurta`) are skinned as one hanging tube, so they don't split lik
 
 UV templates are unfolded panels (front on the left, back on the right) at one scale in pixels per
 metre, so the sides of the body and the crotch aren't squeezed into slivers. Since 0.3.0 the panels are
-relaxed this way for every garment except the `saree`: re-run `kankuro template <type>` before painting,
+relaxed this way for every garment except the `saree`: re-run `sasori template <type>` before painting,
 and repaint textures made on an older template.
 
 ```bash
-kankuro garment add tshirt --color "#eeeeee"
-kankuro garment add tanktop --keep-slot               # under the T-shirt
-kankuro garment add jacket --color "#3d5a40" --fabric denim
-kankuro garment set jacket --texture ./camo.png --height ./camo_height.png
-kankuro garment remove jacket
+sasori garment add tshirt --color "#eeeeee"
+sasori garment add tanktop --keep-slot               # under the T-shirt
+sasori garment add jacket --color "#3d5a40" --fabric denim
+sasori garment set jacket --texture ./camo.png --height ./camo_height.png
+sasori garment remove jacket
 ```
 
 #### Materials
@@ -609,7 +609,7 @@ the colour of its reflection, so the swatch colours look pale and the renders ri
 | `gold_zari` | ![gold_zari](images/materials/gold_zari.jpg) | thread | `#e6c27a` | 0.85 | 0.38 | keeps the fabric's weave relief |
 | `lacquer` | ![lacquer](images/materials/lacquer.jpg) | dielectric | `#8a1a17` (set with `--color`) | 0 | 0.4 | coat 1 |
 
-`kankuro catalog materials` prints the same values. A region of a garment takes a preset's colour,
+`sasori catalog materials` prints the same values. A region of a garment takes a preset's colour,
 metallic and roughness through a metallic-roughness texture, and keeps the cloth's weave relief, folds
 and occlusion; transmission, coat and anisotropy apply only to a whole-garment `--material`.
 
@@ -617,7 +617,7 @@ and occlusion; transmission, coat and anisotropy apply only to a whole-garment `
 long edges and the pallu end), not along sewn seams or edges tucked in at the waist. `hem` is the
 band along the lowest open edges only. The band is measured on the unfolded cloth, so it keeps its
 width through pleats. Its width comes from the garment type (7 cm on a `saree`, 4.5 cm on a `dhoti`,
-1.5 cm on a `kurta`, 2.5 cm otherwise) or from `width` in the spec. `kankuro template` writes both
+1.5 cm on a `kurta`, 2.5 cm otherwise) or from `width` in the spec. `sasori template` writes both
 masks (`<id>_border_mask.png`, `<id>_hem_mask.png`); paint over one to make your own region and pass
 it with `--mask`.
 
@@ -626,12 +626,12 @@ A material change is a spec edit: `render` and `build` pick it up, nothing else 
 ![A saree with a gold zari border](images/materials/saree_gold_zari.jpg)
 
 ```bash
-kankuro garment set saree --material-region border=gold_zari
-kankuro garment set pants --material-region hem=gem:#1f5fbf
-kankuro garment set kurta --material-region trim=silver --mask ./kurta_trim_mask.png
-kankuro garment import --file armour.glb --id kavach --material bronze
-kankuro garment set kavach --material none     # back to the mesh's own materials
-kankuro catalog materials
+sasori garment set saree --material-region border=gold_zari
+sasori garment set pants --material-region hem=gem:#1f5fbf
+sasori garment set kurta --material-region trim=silver --mask ./kurta_trim_mask.png
+sasori garment import --file armour.glb --id kavach --material bronze
+sasori garment set kavach --material none     # back to the mesh's own materials
+sasori catalog materials
 ```
 
 The swatches come from `python tools/material_swatches.py`.
@@ -641,7 +641,7 @@ The swatches come from `python tools/material_swatches.py`.
 Write UV templates so an image model (or a person) can paint new garment textures.
 
 ```
-kankuro template [TARGET ...] [--out DIR] [--size PX]
+sasori template [TARGET ...] [--out DIR] [--size PX]
 ```
 
 | option | default | meaning |
@@ -660,8 +660,8 @@ The UV layout is computed on a fixed reference body, so **one texture fits a gar
 body shape**.
 
 ```bash
-kankuro template tshirt            # templates/tshirt_template.png + tshirt_mask.png
-kankuro template body --size 4096  # skin layout for `kankuro skin --texture`
+sasori template tshirt            # templates/tshirt_template.png + tshirt_mask.png
+sasori template body --size 4096  # skin layout for `sasori skin --texture`
 ```
 
 Prints `{"templates": {"<id>": {"template", "mask", "border_mask", "hem_mask", "layout", "size"}}, "how_to_retexture": "..."}`.
@@ -678,7 +678,7 @@ braids and dangling ornaments ([bones](#bones)). None of them changes the 65 Mes
 (66 with `root`): extra bones always hang under a standard bone, so every clip still plays and
 `validate` lists them under `extra_bones`.
 
-Their placement is modelled on the neutral body (`kankuro reference-body`) and carried onto each
+Their placement is modelled on the neutral body (`sasori reference-body`) and carried onto each
 character with a best-fit similarity transform of the body around the bone, so one mesh fits every
 body shape. Offsets are in metres on the reference body: x is the character's left, y is back, z is up.
 
@@ -689,11 +689,11 @@ body shape. Offsets are in metres on the reference body: x is the character's le
 A rigid mesh that follows one bone: a crown, earrings, a necklace, armlets, bangles, a belt buckle.
 
 ```
-kankuro accessory add|set ID [--file MESH | --builtin NAME] [--bone BONE] [--fit FIT] [--hang N]
+sasori accessory add|set ID [--file MESH | --builtin NAME] [--bone BONE] [--fit FIT] [--hang N]
                       [--offset X,Y,Z] [--rotate X,Y,Z] [--scale S]
                       [--material PRESET] [--color C] [--roughness R] [--layer N] [--hide-hair true|false]
-kankuro accessory remove ID
-kankuro accessory list
+sasori accessory remove ID
+sasori accessory list
 ```
 
 | option | meaning |
@@ -712,11 +712,11 @@ Built-ins: `circlet` (gold head band), `ring_earring_l` / `ring_earring_r` (gold
 lobes, with one hang bone each), `bangle_l` / `bangle_r` (gold bangles on the forearms).
 
 ```bash
-kankuro accessory add circlet
-kankuro accessory add crown --file crown.glb --bone head --material gold
-kankuro accessory add haar --file necklace.glb --bone spine_03 --hang 3 --fit chest --material gold
-kankuro accessory add bajuband_l --file armlet.glb --bone upperarm_l --fit wrap
-kankuro accessory set crown --offset 0,0,0.01 --rotate 0,0,5 --scale 1.05
+sasori accessory add circlet
+sasori accessory add crown --file crown.glb --bone head --material gold
+sasori accessory add haar --file necklace.glb --bone spine_03 --hang 3 --fit chest --material gold
+sasori accessory add bajuband_l --file armlet.glb --bone upperarm_l --fit wrap
+sasori accessory set crown --offset 0,0,0.01 --rotate 0,0,5 --scale 1.05
 ```
 
 Prints `{"accessory": {...}, "accessories": [...]}`; `list` adds the built-ins and fits.
@@ -727,11 +727,11 @@ An object held in the hand. It hangs from a socket bone (`prop_l` or `prop_r`, u
 `hand_r`, with its Z axis along the palm normal), so engines can also attach other objects there.
 
 ```
-kankuro prop add|set ID [--file MESH | --builtin NAME] [--hand l|r|both] [--anchor l|r]
+sasori prop add|set ID [--file MESH | --builtin NAME] [--hand l|r|both] [--anchor l|r]
                   [--grip GRIP] [--grip-weight W] [--reach M]
                   [--offset X,Y,Z] [--rotate X,Y,Z] [--scale S] [--material PRESET] [--color C] [--roughness R]
-kankuro prop remove ID
-kankuro prop list
+sasori prop remove ID
+sasori prop list
 ```
 
 | option | meaning |
@@ -757,11 +757,11 @@ Built-ins: `handle` (a plain 3 cm cylinder: a tool grip or bucket handle), `staf
 ![The staff on Idle, and the flute held to the mouth with both hands](images/attach/props.jpg)
 
 ```bash
-kankuro prop add staff
-kankuro prop add bow --file bow.glb --hand l --grip power
-kankuro prop add flute --hand both --anchor r --grip flute
-kankuro prop set bow --offset 0,0.02,0 --rotate 0,90,0
-kankuro render --animation Walk --frame 0.3 --views front,side
+sasori prop add staff
+sasori prop add bow --file bow.glb --hand l --grip power
+sasori prop add flute --hand both --anchor r --grip flute
+sasori prop set bow --offset 0,0.02,0 --rotate 0,90,0
+sasori render --animation Walk --frame 0.3 --views front,side
 ```
 
 Prints `{"prop": {...}, "props": [...]}`; `list` adds the built-ins and grips.
@@ -771,7 +771,7 @@ Prints `{"prop": {...}, "props": [...]}`; `list` adds the built-ins and grips.
 List the finger poses props use.
 
 ```
-kankuro grip list
+sasori grip list
 ```
 
 | grip | kind | for |
@@ -791,11 +791,11 @@ Extra bone chains: tails, braids, ponytails, dangling ornaments. Each chain hang
 bone; its bones are named `<id>_01`, `<id>_02`, ... from the root.
 
 ```
-kankuro bones add|set ID [--parent BONE] [--count N] [--length M] [--taper T] [--curve up:F|down:F]
+sasori bones add|set ID [--parent BONE] [--count N] [--length M] [--taper T] [--curve up:F|down:F]
                       [--radius R] [--color C] [--material PRESET] [--follow hair|none]
                       [--stiffness K] [--damping D] [--gravity G] [--no-motion]
-kankuro bones remove ID
-kankuro bones list
+sasori bones remove ID
+sasori bones list
 ```
 
 | option | default | meaning |
@@ -820,9 +820,9 @@ it (default all). Accessories with `--hang` use the same spring with stiffer set
 ![A tail swinging through the Walk clip](images/attach/tail_walk.jpg)
 
 ```bash
-kankuro bones add tail --parent pelvis --count 8 --length 0.9 --curve up:0.3 --taper 0.5 --radius 0.035
-kankuro bones add braid --parent head --count 5 --follow hair
-kankuro build --animations Idle_A,Walk --secondary-motion tail,braid
+sasori bones add tail --parent pelvis --count 8 --length 0.9 --curve up:0.3 --taper 0.5 --radius 0.035
+sasori bones add braid --parent head --count 5 --follow hair
+sasori build --animations Idle_A,Walk --secondary-motion tail,braid
 ```
 
 Prints `{"chain": {...}, "bones": ["tail_01", ...], "extra_bones": [...]}`. `list` also names the
@@ -840,7 +840,7 @@ Building a character takes roughly 5 to 20 seconds on a laptop CPU.
 Preview PNGs, rendered with Cycles on the CPU. Use them to check the result visually.
 
 ```
-kankuro render [--views V1,V2,...] [--focus full|upper|head]
+sasori render [--views V1,V2,...] [--focus full|upper|head]
                [--animation CLIP --frame F] [--expression EXPR]
                [--size PX] [--samples N] [--out DIR] [--prefix NAME]
                [--secondary-motion all|none|IDS]
@@ -862,10 +862,10 @@ kankuro render [--views V1,V2,...] [--focus full|upper|head]
 Writes one PNG per view plus a combined `<prefix>_sheet.png`.
 
 ```bash
-kankuro render                                  # all four views
-kankuro render --focus head --views front,three_quarter
-kankuro render --animation Jog --frame 0.3      # check how clothes deform mid-stride
-kankuro render --focus head --expression surprise
+sasori render                                  # all four views
+sasori render --focus head --views front,three_quarter
+sasori render --animation Jog --frame 0.3      # check how clothes deform mid-stride
+sasori render --focus head --expression surprise
 ```
 
 Prints `{"views": {"front": "<png>", ...}, "sheet": "<png>", "animation", "frame", "focus", "expression"?, "warnings"?}`.
@@ -877,7 +877,7 @@ can't reach it.
 Build the character and export a rigged GLB.
 
 ```
-kankuro build [--out GLB] [--animations A,B,...|all] [--render] [--size PX] [--samples N]
+sasori build [--out GLB] [--animations A,B,...|all] [--render] [--size PX] [--samples N]
               [--secondary-motion all|none|IDS]
 ```
 
@@ -899,9 +899,9 @@ chains, hang bones) are listed in the manifest's `skeleton.extra_bones`.
 
 Every character is built with the 52 **ARKit blendshapes** (`jawOpen`, `eyeBlinkLeft`,
 `mouthSmileRight`, `browInnerUp`, ...) as named glTF morph targets, so face-tracking apps, Unity,
-Unreal Live Link and three.js can drive the face directly. `kankuro catalog expressions` lists the
+Unreal Live Link and three.js can drive the face directly. `sasori catalog expressions` lists the
 names. Preview them with `render --expression`. To leave them out (a smaller file), run
-`kankuro set face.blendshapes=none`.
+`sasori set face.blendshapes=none`.
 
 Prints a manifest, also saved as `build/manifest.json`:
 
@@ -931,7 +931,7 @@ Read `warnings`: they flag things that built but may look wrong.
 List the Mesh2Motion clips that `build --animations` and `render --animation` accept.
 
 ```
-kankuro animations
+sasori animations
 ```
 
 Prints `{"count": 87, "clips": [{"name": "Idle_A", "frames": [0, 75], "seconds": 2.5}, ...]}`.
@@ -949,7 +949,7 @@ motion.
 Export the neutral T-pose body to model custom hair or garments on.
 
 ```
-kankuro reference-body --out GLB [--with-rig]
+sasori reference-body --out GLB [--with-rig]
 ```
 
 Model on top of it in any 3D tool, export GLB/OBJ/FBX, then use `hair import` or `garment import`.
@@ -962,7 +962,7 @@ and skin weights.
 Rig any humanoid mesh to the Mesh2Motion skeleton. It doesn't need a project.
 
 ```
-kankuro autorig <mesh> --out GLB [--facing auto|-y|+y|-x|+x] [--animations A,B] [--render DIR]
+sasori autorig <mesh> --out GLB [--facing auto|-y|+y|-x|+x] [--animations A,B] [--render DIR]
                 [--method auto|heat|proximity] [--prop NAME[:HAND[:GRIP]] ...]
                 [--extra-chain ID:PART[:COUNT] ...]
 ```
@@ -989,9 +989,9 @@ the fit against the mesh. Blendshapes (shape keys) in the input are kept. A log 
 the output as `autorig.log`.
 
 ```bash
-kankuro autorig robot.glb --out robot_rigged.glb --animations Idle_A,Walk --render ./check
-kankuro autorig vanara.glb --out vanara.glb --extra-chain tail:Tail:8 --animations Walk
-kankuro autorig farmer.glb --out farmer.glb --prop staff --prop ./hoe.glb:l:power --animations Idle_A
+sasori autorig robot.glb --out robot_rigged.glb --animations Idle_A,Walk --render ./check
+sasori autorig vanara.glb --out vanara.glb --extra-chain tail:Tail:8 --animations Walk
+sasori autorig farmer.glb --out farmer.glb --prop staff --prop ./hoe.glb:l:power --animations Idle_A
 ```
 
 The chain's root hangs from the standard bone nearest the part's attached end. The output adds
@@ -1010,7 +1010,7 @@ the skin hands over from the foot to the toes, so toes roll over the ball of the
 instead of kinking.
 
 ```
-kankuro validate <glb>
+sasori validate <glb>
 ```
 
 Prints `{"valid": true|false, "checks": [{"check": "bone_names", "pass": true, "detail": ...}, ...]}`. Use it after `build` or `autorig`; any check with `"pass": false` says what is off.
@@ -1020,7 +1020,7 @@ Prints `{"valid": true|false, "checks": [{"check": "bone_names", "pass": true, "
 ## schema
 
 ```
-kankuro schema
+sasori schema
 ```
 
 A machine-readable summary of every command, the spec file name and the conventions. It's the
@@ -1029,10 +1029,10 @@ quickest thing for an agent to read first.
 ## guide
 
 ```
-kankuro guide [TOPIC] [--list] [--json]
+sasori guide [TOPIC] [--list] [--json]
 ```
 
-Prints a guide as **plain Markdown text** (not JSON), so an agent can learn kankuro from the
+Prints a guide as **plain Markdown text** (not JSON), so an agent can learn sasori from the
 terminal alone. The guides are these docs, shipped inside the package.
 
 | topic | prints |
@@ -1049,8 +1049,8 @@ Unknown topics fail with `unknown_topic`.
 
 ## Built-in help
 
-`kankuro --help` lists every command with a one-line summary, the JSON contract and a quick start.
-`kankuro <command> --help` explains every option and ends with worked examples and the valid names
+`sasori --help` lists every command with a one-line summary, the JSON contract and a quick start.
+`sasori <command> --help` explains every option and ends with worked examples and the valid names
 (presets, styles, garment types, fabrics, colours) read live from the catalogs. Help output is plain
 text, like `guide`.
 
@@ -1060,9 +1060,9 @@ text, like `guide`.
 
 | code | when | what to do |
 |---|---|---|
-| `bad_arguments` | the command line didn't parse | `kankuro schema` or `kankuro <command> --help` |
+| `bad_arguments` | the command line didn't parse | `sasori schema` or `sasori <command> --help` |
 | `missing_arg` | a required argument is missing | read `hint` |
-| `no_project` | no `character.json` where it looked | `kankuro init <dir>`, or pass `-p` |
+| `no_project` | no `character.json` where it looked | `sasori init <dir>`, or pass `-p` |
 | `exists` | `init` on a folder that has a spec | add `--force` |
 | `bad_spec` | `character.json` is not valid JSON or has the wrong version | fix or recreate it |
 | `bad_assignment` | `set` argument without `=` | `path=value` |
@@ -1076,8 +1076,8 @@ text, like `guide`.
 | `missing_file` | a file you passed, or one the spec refers to, doesn't exist | check the path |
 | `bad_format`, `no_mesh` | an imported mesh can't be read | use `.glb`, `.gltf`, `.obj` or `.fbx` with a mesh in it |
 | `bad_view`, `bad_focus`, `bad_section`, `bad_expression` | an option value isn't recognised | `hint` lists valid values |
-| `unknown_face_slider`, `unknown_face_preset`, `unknown_brow_preset`, `bad_group` | a face/brow name not in the catalog | `hint` lists valid names; `kankuro face list` |
-| `no_blendshapes` | `render --expression` on a character built with `face.blendshapes=none` | `kankuro set face.blendshapes=arkit52` |
+| `unknown_face_slider`, `unknown_face_preset`, `unknown_brow_preset`, `bad_group` | a face/brow name not in the catalog | `hint` lists valid names; `sasori face list` |
+| `no_blendshapes` | `render --expression` on a character built with `face.blendshapes=none` | `sasori set face.blendshapes=arkit52` |
 | `autorig_failed` | the mesh isn't an upright humanoid with separate legs | read `message` |
 | `no_blender` | `bpy` can't be imported | install `bpy==5.2.*` on Python 3.13 (see [installation.md](installation.md)) |
 | `internal` | a bug | `error.traceback` and `build/blender.log`; please open an issue |

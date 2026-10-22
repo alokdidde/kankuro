@@ -57,4 +57,4 @@ jobs:
         run: |
           python -m venv /tmp/venv
           /tmp/venv/bin/pip install dist/*.whl
-          python tools/smoke_test.py /tmp/venv/bin/kankuro
+          python tools/smoke_test.py /tmp/venv/bin/sasori

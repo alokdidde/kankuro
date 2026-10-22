@@ -8,14 +8,14 @@ import numpy as np
 from test_cli import cc
 
 try:
-    import bpy  # noqa: F401  (loads mathutils for the kankuro.blender modules)
+    import bpy  # noqa: F401  (loads mathutils for the sasori.blender modules)
 except ImportError:  # pragma: no cover
     bpy = None
 
 
 def _build(*sets, preset="male"):
-    from kankuro import spec as specmod
-    from kankuro.blender import build
+    from sasori import spec as specmod
+    from sasori.blender import build
     p = os.path.join(tempfile.mkdtemp(), "c")
     cc("init", p, "--preset", preset)
     cc("set", "face.blendshapes=none", *sets, project=p)
@@ -32,7 +32,7 @@ class BallOfTheFoot(unittest.TestCase):
               ("female", ("body.height_cm=150", "body.macros.weight=0.9"))]
 
     def test_pivot_on_the_crease_with_a_soft_blend(self):
-        from kankuro.blender import util, validate
+        from sasori.blender import util, validate
         for preset, sets in self.BODIES:
             with self.subTest(body=preset, sets=sets):
                 b, _ = _build(*sets, preset=preset)
@@ -58,7 +58,7 @@ class BallOfTheFoot(unittest.TestCase):
 
     def test_toe_off_keeps_the_skin(self):
         """At Walk's toe-off (ball_l 25 degrees) the crease bends without pinching."""
-        from kankuro.blender import build, util
+        from sasori.blender import build, util
         b, _ = _build()
         b.body.data.calc_loop_triangles()
         F = np.array([t.vertices[:] for t in b.body.data.loop_triangles])
@@ -73,7 +73,7 @@ class BallOfTheFoot(unittest.TestCase):
 
     def test_foot_shape_unchanged(self):
         """Moving the pivot must not tip the foot: the sole stays on the ground, toes level."""
-        from kankuro.blender import util
+        from sasori.blender import util
         b, _ = _build()
         co = util.get_coords(b.body)
         W = util.weight_matrix(b.body, ["ball_l"])[:, 0]

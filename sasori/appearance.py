@@ -1,6 +1,6 @@
 """Face shape sliders, face presets and randomisation, and named colours (pure Python, no Blender).
 
-Face sliders are friendly, symmetric controls over MakeHuman's detail modifiers (`kankuro morphs`).
+Face sliders are friendly, symmetric controls over MakeHuman's detail modifiers (`sasori morphs`).
 They live in spec["face"]["shape"] as {"nose.width": 0.4, ...} and are merged into body.morphs at build
 time (`effective_morphs`), so a raw body.morphs value and a slider on the same modifier add up.
 """
@@ -149,7 +149,7 @@ def _check_slider(name):
         close = [k for k in FACE_SLIDERS if k.split(".")[0] == name.split(".")[0]]
         raise CliError("unknown_face_slider", f"Unknown face slider '{name}'",
                        hint=("Sliders in this group: " + ", ".join(close)) if close else
-                       f"Groups: {', '.join(groups)}. List them with `kankuro face list`")
+                       f"Groups: {', '.join(groups)}. List them with `sasori face list`")
 
 
 def clamp(name, value):
