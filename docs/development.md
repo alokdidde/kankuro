@@ -85,23 +85,27 @@ python tools/smoke_test.py ./unpacked/kankuro-0.1.0-linux-x64/kankuro     # afte
 
 ## Cutting a release
 
-1. Bump the version in **both** `pyproject.toml` (`version`) and `kankuro/cli.py` (`VERSION`).
-   The workflow refuses to release if they or the tag disagree.
-2. Commit and push to `main`, then either push a tag or push `main` to the `release` branch
-   (which tags the release `v<version>` for you, handy where tag pushes aren't allowed):
+Releases are automatic. Every push to `main` (a merged pull request) checks the version in
+`pyproject.toml`; if there is no GitHub release for it yet, it is published as `v<version>`.
+Merges that keep the version only run that check, so nothing is rebuilt.
 
-   ```bash
-   git tag v0.2.0 && git push origin main v0.2.0
-   # or
-   git push origin main:release
-   ```
-
-3. [`.github/workflows/release.yml`](../.github/workflows/release.yml) then:
+1. In the pull request, bump the version in **both** `pyproject.toml` (`version`) and
+   `kankuro/cli.py` (`VERSION`). The workflow refuses to release if they disagree.
+2. Merge it. [`.github/workflows/release.yml`](../.github/workflows/release.yml) then:
    * runs the full test matrix,
    * builds the wheel and sdist,
    * builds and smoke-tests the four bundles in parallel,
-   * creates the GitHub release with all files, a download table, auto-generated notes, and
-     `SHA256SUMS.txt`.
+   * creates the GitHub release and tag with all files, a download table, auto-generated notes,
+     and `SHA256SUMS.txt` (and uploads to PyPI once that is switched on, below).
+
+To release by hand instead, push a tag, or push `main` to the `release` branch (handy where tag
+pushes aren't allowed):
+
+```bash
+git tag v0.4.0 && git push origin v0.4.0
+# or
+git push origin main:release
+```
 
 Pull requests that change packaging (`release.yml`, `tools/make_bundle.py`, `tools/smoke_test.py`,
 `pyproject.toml`) run the same pipeline as a dry run, and so does **Actions > Release > Run workflow**
@@ -119,7 +123,7 @@ The release workflow has a `pypi` job that's off until you turn it on. It uses P
 3. In the GitHub repo: **Settings > Environments > New environment** named `pypi`.
 4. **Settings > Secrets and variables > Actions > Variables**: add `PUBLISH_PYPI` = `true`.
 
-The next tagged release then also uploads the wheel and sdist to PyPI, and
+The next release then also uploads the wheel and sdist to PyPI, and
 `pip install kankuro` / `uv tool install kankuro` work everywhere.
 
 ## Updating Blender
